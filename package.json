@@ -1,0 +1,61 @@
+{
+  "name": "teamclaude",
+  "version": "0.1.0",
+  "description": "Autonomous sprint plugin for Claude Code — real-time visualization of agent teams",
+  "type": "module",
+  "bin": {
+    "teamclaude": "./bin/teamclaude.js"
+  },
+  "main": "./dist/server.js",
+  "files": [
+    "dist",
+    "bin",
+    "server/ui.html",
+    "agents",
+    "commands",
+    "skills",
+    ".claude-plugin",
+    ".sprint.example.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "esbuild server/index.ts --bundle --platform=node --format=esm --outfile=dist/server.js --external:chokidar --external:ws --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
+    "dev": "node --import tsx server/index.ts",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "chokidar": "^4.0.3",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "@types/ws": "^8.5.14",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "agent",
+    "sprint",
+    "visualization",
+    "autonomous",
+    "plugin"
+  ],
+  "author": "Albert Nahas",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/albertonahas/teamclaude.git"
+  },
+  "homepage": "https://github.com/albertonahas/teamclaude#readme",
+  "engines": {
+    "node": ">=18"
+  }
+}

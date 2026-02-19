@@ -1,0 +1,1825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sprint Visualizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-deep: #060a13;
+    --bg-base: #0b1120;
+    --bg-surface: #111b2e;
+    --bg-elevated: #182440;
+    --border: #1c2d4a;
+    --border-subtle: #14233d;
+    --text-primary: #e8edf5;
+    --text-secondary: #9aadca;
+    --text-muted: #627d9e;
+    --accent: #06b6d4;
+    --accent-hover: #22d3ee;
+    --accent-glow: rgba(6, 182, 212, 0.2);
+    --blue: #3b82f6;
+    --green: #22c55e;
+    --purple: #a78bfa;
+    --amber: #f59e0b;
+    --red: #ef4444;
+    --font-display: 'Syne', sans-serif;
+    --font-body: 'DM Sans', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+
+  body {
+    font-family: var(--font-body);
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ═══════════════════════════════════════
+     SETUP PHASE
+     ═══════════════════════════════════════ */
+
+  .setup-phase {
+    height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    background: var(--bg-deep);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .setup-phase::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 20% -10%, rgba(6, 182, 212, 0.08) 0%, transparent 55%),
+      radial-gradient(ellipse at 80% 110%, rgba(167, 139, 250, 0.06) 0%, transparent 55%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .setup-top, .setup-main, .setup-bottom {
+    position: relative;
+    z-index: 1;
+  }
+
+  .setup-top {
+    padding: 28px 40px 20px;
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    animation: setup-enter 0.4s ease-out both;
+  }
+
+  .setup-title {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+  }
+
+  .setup-subtitle {
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+
+  .setup-main {
+    display: grid;
+    grid-template-columns: 2fr 3fr;
+    gap: 20px;
+    padding: 0 40px 20px;
+    min-height: 0;
+    animation: setup-enter 0.4s ease-out 0.08s both;
+  }
+
+  .setup-panel {
+    background: var(--bg-base);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 0;
+    transition: border-color 0.2s;
+  }
+  .setup-panel:hover { border-color: #243552; }
+
+  .panel-label {
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-muted);
+  }
+
+  .setup-team-svg {
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+  }
+
+  .setup-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .setup-control {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .stepper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .stepper-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    font-size: 16px;
+    font-family: var(--font-mono);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+  }
+  .stepper-btn:hover {
+    border-color: var(--accent);
+    background: var(--bg-elevated);
+    color: var(--accent);
+  }
+
+  .stepper span {
+    min-width: 24px;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .toggle-btn {
+    padding: 6px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+    color: var(--text-muted);
+    font-size: 12px;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .toggle-btn:hover { border-color: var(--text-muted); }
+  .toggle-btn.active {
+    background: rgba(167, 139, 250, 0.12);
+    border-color: var(--purple);
+    color: var(--purple);
+  }
+
+  .setup-mode {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  /* Roadmap Panel */
+  .setup-roadmap { min-height: 0; }
+
+  .setup-roadmap textarea {
+    flex: 1;
+    min-height: 0;
+    background: var(--bg-deep);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.7;
+    resize: none;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .setup-roadmap textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent-glow);
+  }
+  .setup-roadmap textarea::placeholder { color: var(--text-muted); }
+
+  .setup-roadmap.optional textarea {
+    border-color: rgba(167, 139, 250, 0.25);
+  }
+  .setup-roadmap .roadmap-hint {
+    font-size: 12px;
+    color: var(--purple);
+    display: none;
+  }
+  .setup-roadmap.optional .roadmap-hint { display: block; }
+
+  /* Bottom Bar */
+  .setup-bottom {
+    padding: 20px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-top: 1px solid var(--border-subtle);
+    animation: setup-enter 0.4s ease-out 0.16s both;
+  }
+
+  .launch-btn {
+    padding: 12px 52px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: var(--bg-deep);
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 0 24px var(--accent-glow);
+  }
+  .launch-btn:hover {
+    background: var(--accent-hover);
+    box-shadow: 0 0 32px var(--accent-glow), 0 0 64px rgba(6, 182, 212, 0.08);
+    transform: translateY(-1px);
+  }
+  .launch-btn:active { transform: translateY(0); }
+  .launch-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+  }
+
+  @keyframes setup-enter {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (max-width: 768px) {
+    .setup-top, .setup-main, .setup-bottom { padding-left: 16px; padding-right: 16px; }
+    .setup-main { grid-template-columns: 1fr; overflow-y: auto; }
+    .setup-top { flex-direction: column; gap: 4px; }
+  }
+
+  /* ═══════════════════════════════════════
+     SPRINT PHASE
+     ═══════════════════════════════════════ */
+
+  #sprint-phase {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  .sprint-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 20px;
+    background: var(--bg-base);
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+  }
+
+  .sprint-bar-title {
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+  }
+
+  .sprint-bar-team {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    background: var(--bg-surface);
+    padding: 2px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border-subtle);
+  }
+
+  .sprint-bar-mode {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .sprint-bar-sep {
+    width: 1px;
+    height: 16px;
+    background: var(--border);
+    flex-shrink: 0;
+  }
+
+  .sprint-bar-cycle {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--purple);
+    background: rgba(167, 139, 250, 0.1);
+    padding: 3px 12px;
+    border-radius: 4px;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .sprint-bar-cycle:empty { display: none; }
+  .sprint-bar-cycle .info-tip { width: 14px; height: 14px; font-size: 9px; }
+
+  .sprint-bar-spacer { flex: 1; }
+
+  .container {
+    display: grid;
+    grid-template-columns: var(--sidebar-w, 300px) 5px 1fr;
+    grid-template-rows: 1fr 5px var(--msg-h, 280px);
+    flex: 1;
+    min-height: 0;
+    gap: 0;
+    background: var(--border-subtle);
+  }
+
+  .panel {
+    background: var(--bg-base);
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 10px 16px;
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-height: 40px;
+  }
+  .panel-header span[id] { color: var(--text-secondary); }
+
+  /* Resize Handles */
+  .resize-h {
+    grid-row: 1;
+    grid-column: 2;
+    cursor: col-resize;
+    background: var(--border-subtle);
+    position: relative;
+    z-index: 10;
+    transition: background 0.15s;
+  }
+  .resize-h:hover, .resize-h.active { background: var(--accent); }
+  .resize-h::after {
+    content: '';
+    position: absolute;
+    inset: 0 -4px;
+  }
+
+  .resize-v {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    cursor: row-resize;
+    background: var(--border-subtle);
+    position: relative;
+    z-index: 10;
+    transition: background 0.15s;
+  }
+  .resize-v:hover, .resize-v.active { background: var(--accent); }
+  .resize-v::after {
+    content: '';
+    position: absolute;
+    inset: -4px 0;
+  }
+
+  /* Agent Nodes */
+  .agents-panel { grid-row: 1; grid-column: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+  .agents-svg { flex: 1; width: 100%; min-height: 0; }
+
+  .node-label {
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 700;
+    fill: var(--text-primary);
+  }
+  .node-role {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    fill: var(--text-muted);
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.3; r: 38; }
+    50% { opacity: 0.6; r: 44; }
+  }
+  .pulse-ring { animation: pulse 2s ease-in-out infinite; }
+  .pulse-ring.idle { animation: none; opacity: 0.1; }
+
+  /* Tasks — List View */
+  .tasks-panel { grid-row: 1; grid-column: 3; display: flex; flex-direction: column; }
+  .tasks-list { flex: 1; overflow-y: auto; padding: 8px; }
+
+  .task-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-radius: 6px;
+    margin-bottom: 2px;
+    transition: background 0.15s;
+    cursor: pointer;
+    flex-wrap: wrap;
+  }
+  .task-row:hover { background: var(--bg-surface); }
+
+  .task-id {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    min-width: 28px;
+  }
+
+  .status-badge {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .status-pending { background: var(--text-muted); }
+  .status-in_progress { background: var(--amber); box-shadow: 0 0 6px rgba(245, 158, 11, 0.25); }
+  .status-completed { background: var(--green); }
+  .status-deleted { background: var(--red); }
+  .status-blocked { background: var(--red); animation: pulse 1.5s ease-in-out infinite; }
+
+  .task-subject {
+    flex: 1;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .task-owner {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    min-width: 80px;
+    text-align: right;
+  }
+
+  .task-desc {
+    width: 100%;
+    padding: 6px 0 4px 48px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    display: none;
+  }
+  .task-row.expanded .task-desc { display: block; }
+
+  .task-chevron {
+    font-size: 8px;
+    color: var(--text-muted);
+    transition: transform 0.15s;
+    flex-shrink: 0;
+  }
+  .task-row.expanded .task-chevron { transform: rotate(90deg); }
+
+  /* View Toggle */
+  .view-toggle {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    cursor: pointer;
+    margin-left: auto;
+    transition: all 0.15s;
+  }
+  .view-toggle:hover { border-color: var(--text-muted); color: var(--text-primary); }
+
+  /* Tasks — Kanban Board View */
+  .tasks-list.board {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    overflow: hidden;
+  }
+
+  .kanban-col {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--bg-surface);
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle);
+  }
+
+  .kanban-hdr {
+    padding: 10px 12px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+  }
+
+  .kanban-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .kanban-count { margin-left: auto; }
+
+  .kanban-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .kanban-card {
+    background: var(--bg-base);
+    border: 1px solid var(--border-subtle);
+    border-left: 3px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    animation: fadeIn 0.2s ease-out;
+  }
+  .kanban-card:hover { border-color: var(--border); background: var(--bg-elevated); }
+  .kanban-card.col-todo { border-left-color: var(--text-muted); }
+  .kanban-card.col-progress { border-left-color: var(--amber); }
+  .kanban-card.col-review { border-left-color: var(--blue); }
+  .kanban-card.col-done { border-left-color: var(--green); }
+  .kanban-card.blocked { border-left-color: var(--red); opacity: 0.7; }
+
+  .card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .card-id { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .card-blocked { font-family: var(--font-mono); font-size: 9px; color: var(--red); margin-left: auto; }
+  .card-subject { font-size: 12px; color: var(--text-primary); line-height: 1.4; word-break: break-word; }
+  .card-owner { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); margin-top: 6px; }
+
+  .card-desc {
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border-subtle);
+    display: none;
+  }
+  .kanban-card.expanded .card-desc { display: block; }
+
+  /* Messages */
+  .messages-panel { grid-row: 3; grid-column: 1 / -1; display: flex; flex-direction: column; }
+  .messages-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .msg-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 5px 0;
+    font-size: 13px;
+    line-height: 1.5;
+    animation: fadeIn 0.2s ease-out;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .msg-time {
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    font-size: 10px;
+    min-width: 58px;
+    padding-top: 3px;
+  }
+
+  .msg-sender {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    min-width: 110px;
+    font-size: 11px;
+    padding-top: 2px;
+  }
+  .msg-sender.manager { color: #60a5fa; }
+  .msg-sender.engineer { color: #4ade80; }
+  .msg-sender.pm { color: var(--purple); }
+  .msg-sender.system { color: var(--text-secondary); }
+
+  .msg-content {
+    flex: 1;
+    color: #c2cede;
+    word-break: break-word;
+  }
+
+  .msg-protocol {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 4px;
+    margin-right: 6px;
+    display: inline-block;
+  }
+  .proto-TASK_ASSIGNED { background: #1e3a5f; color: #60a5fa; }
+  .proto-READY_FOR_REVIEW { background: #1a3a2a; color: #4ade80; }
+  .proto-APPROVED { background: #14532d; color: #22c55e; }
+  .proto-REQUEST_CHANGES { background: #451a03; color: #fb923c; }
+  .proto-RESUBMIT { background: #1a3a2a; color: #86efac; }
+  .proto-ESCALATE { background: #450a0a; color: #f87171; }
+  .proto-ROADMAP_READY { background: #2e1065; color: var(--purple); }
+  .proto-CYCLE_COMPLETE { background: #1e3a5f; color: #60a5fa; }
+  .proto-SPRINT_COMPLETE { background: #1e3a5f; color: #60a5fa; }
+  .proto-ACCEPTANCE { background: #14532d; color: #22c55e; }
+  .proto-NEXT_CYCLE { background: #2e1065; color: #c4b5fd; }
+
+  /* Banners */
+  .banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 6px;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    z-index: 100;
+    transition: transform 0.3s;
+  }
+  .banner.hidden { transform: translateY(-100%); }
+  .banner.disconnected { background: #7f1d1d; color: #fca5a5; }
+  .banner.connected { background: #14532d; color: #86efac; }
+
+  .empty-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-muted);
+    font-size: 13px;
+    text-align: center;
+    padding: 20px;
+  }
+
+  /* Escalation */
+  .escalation-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 10px 20px;
+    background: #7f1d1d;
+    color: #fca5a5;
+    font-size: 12px;
+    z-index: 200;
+    display: none;
+    align-items: center;
+    gap: 12px;
+    animation: slideDown 0.3s ease-out;
+  }
+  .escalation-bar.visible { display: flex; }
+  @keyframes slideDown {
+    from { transform: translateY(-100%); }
+    to { transform: translateY(0); }
+  }
+  .escalation-icon { font-size: 16px; flex-shrink: 0; }
+  .escalation-text { flex: 1; }
+  .escalation-text strong { color: #f87171; }
+  .escalation-dismiss {
+    background: #991b1b;
+    color: #fca5a5;
+    border: 1px solid #b91c1c;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  .escalation-dismiss:hover { background: #b91c1c; }
+
+  /* Control Buttons */
+  .stop-btn {
+    background: none;
+    border: 1px solid #7f1d1d;
+    color: #f87171;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .stop-btn:hover { background: #7f1d1d; color: #fca5a5; }
+
+  .pause-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .pause-btn:hover { border-color: var(--text-muted); color: var(--text-primary); }
+  .pause-btn.paused { border-color: var(--amber); color: var(--amber); }
+
+  /* Sprint bar tooltip opens downward */
+  .sprint-bar .info-tip .tip-text {
+    bottom: auto;
+    top: calc(100% + 8px);
+  }
+  .sprint-bar .info-tip .tip-text::after {
+    top: auto;
+    bottom: 100%;
+    border-top-color: transparent;
+    border-bottom-color: var(--border);
+  }
+
+  /* Loading state */
+  .loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 16px;
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+  .loading-dots { display: flex; gap: 6px; }
+  .loading-dots span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: loadDot 1.2s ease-in-out infinite;
+  }
+  .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes loadDot {
+    0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+    40% { opacity: 1; transform: scale(1.2); }
+  }
+
+  /* Phase Indicator */
+  .phase-indicator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 14px;
+    text-align: center;
+    padding: 40px 20px;
+  }
+  .phase-title {
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .phase-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.6;
+    max-width: 300px;
+  }
+
+  /* Tooltips */
+  .info-tip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    font-style: italic;
+    cursor: help;
+    flex-shrink: 0;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .info-tip:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .info-tip .tip-text {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-style: normal;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    white-space: normal;
+    width: 260px;
+    text-align: left;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 50;
+    pointer-events: none;
+  }
+  .info-tip .tip-text::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: var(--border);
+  }
+  .info-tip:hover .tip-text { display: block; }
+  .info-tip .tip-text strong { color: var(--text-primary); font-weight: 600; }
+
+  /* Tip positioned to the right when near left edge */
+  .info-tip.tip-right .tip-text {
+    left: 0;
+    transform: none;
+  }
+  .info-tip.tip-right .tip-text::after {
+    left: 8px;
+    transform: none;
+  }
+
+  /* Sprint phase: tips open downward */
+  .panel-header .info-tip .tip-text {
+    bottom: auto;
+    top: calc(100% + 8px);
+  }
+  .panel-header .info-tip .tip-text::after {
+    top: auto;
+    bottom: 100%;
+    border-top-color: transparent;
+    border-bottom-color: var(--border);
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<!-- Setup Phase -->
+<div class="setup-phase" id="setup-phase">
+  <header class="setup-top">
+    <h1 class="setup-title">Sprint Visualizer</h1>
+    <p class="setup-subtitle">Configure your team and roadmap</p>
+  </header>
+
+  <main class="setup-main">
+    <section class="setup-panel setup-team">
+      <h2 class="panel-label">Team Topology</h2>
+      <svg id="setup-svg" class="setup-team-svg" viewBox="0 0 300 220" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="setup-controls">
+        <div class="setup-control">
+          <span>Engineers <span class="info-tip tip-right">i<span class="tip-text">Number of engineer agents to spawn. Set to <strong>Auto</strong> to let the manager decide how many are needed based on the roadmap complexity.</span></span></span>
+          <div class="stepper">
+            <button class="stepper-btn" id="eng-minus">&minus;</button>
+            <span id="eng-count">1</span>
+            <button class="stepper-btn" id="eng-plus">+</button>
+          </div>
+        </div>
+        <div class="setup-control">
+          <span>Product Manager <span class="info-tip tip-right">i<span class="tip-text">Enables autonomous mode. The PM agent analyzes the codebase, creates the roadmap, and drives sprint cycles without manual input.</span></span></span>
+          <button class="toggle-btn" id="pm-toggle">Off</button>
+        </div>
+        <div class="setup-control" id="cycles-control" style="display:none">
+          <span>Sprint Cycles <span class="info-tip tip-right">i<span class="tip-text">Number of iterative sprint cycles. Each cycle: PM reviews progress, updates the roadmap, manager delegates, engineers execute. More cycles = more iterations.</span></span></span>
+          <div class="stepper">
+            <button class="stepper-btn" id="cyc-minus">&minus;</button>
+            <span id="cyc-count">1</span>
+            <button class="stepper-btn" id="cyc-plus">+</button>
+          </div>
+        </div>
+      </div>
+      <div class="setup-mode" id="setup-mode">Manual mode <span class="info-tip">i<span class="tip-text"><strong>Manual mode:</strong> You provide the roadmap, the manager delegates tasks to engineers.<br><br><strong>Autonomous mode:</strong> The PM analyzes the codebase, creates the roadmap, and orchestrates the full sprint lifecycle.</span></span></div>
+    </section>
+
+    <section class="setup-panel setup-roadmap" id="roadmap-panel">
+      <h2 class="panel-label">Sprint Roadmap <span class="info-tip">i<span class="tip-text">A list of tasks or goals for the sprint. Each line becomes a task the manager breaks down and assigns to engineers. In autonomous mode, the PM generates this automatically.</span></span></h2>
+      <p class="roadmap-hint">Optional — PM will structure the roadmap. Add guidance if needed.</p>
+      <textarea id="roadmap-input" spellcheck="false" placeholder="1. Add user authentication&#10;2. Fix payment processing bug&#10;3. Refactor database layer&#10;&#10;Write your sprint roadmap..."></textarea>
+    </section>
+  </main>
+
+  <footer class="setup-bottom">
+    <button class="launch-btn" id="launch-btn">Launch Sprint</button>
+  </footer>
+</div>
+
+<!-- Sprint Phase -->
+<div id="sprint-phase" style="display:none">
+  <div class="banner hidden" id="banner"></div>
+  <div class="escalation-bar" id="escalation-bar">
+    <span class="escalation-icon">!</span>
+    <span class="escalation-text" id="escalation-text"></span>
+    <button class="escalation-dismiss" id="escalation-dismiss">Dismiss</button>
+  </div>
+
+  <div class="sprint-bar">
+    <span class="sprint-bar-title">Sprint</span>
+    <span class="sprint-bar-team" id="team-name"></span>
+    <span class="sprint-bar-mode" id="sprint-mode"></span>
+    <span class="sprint-bar-sep"></span>
+    <span class="sprint-bar-cycle" id="cycle-indicator"></span>
+    <span class="sprint-bar-spacer"></span>
+    <button class="pause-btn" id="pause-btn">Pause</button>
+    <button class="stop-btn" id="stop-btn">Stop</button>
+  </div>
+
+  <div class="container" id="sprint-container">
+    <div class="panel agents-panel">
+      <div class="panel-header">
+        <span>Agents <span class="info-tip">i<span class="tip-text">Live topology of the agent team. Green pulse = active, gray = idle. Animated dots on connection lines show real-time message flow between agents.</span></span></span>
+      </div>
+      <svg class="agents-svg" id="agents-svg" viewBox="0 0 280 400" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+
+    <div class="resize-h" id="resize-h"></div>
+
+    <div class="panel tasks-panel">
+      <div class="panel-header">
+        <span>Tasks <span class="info-tip">i<span class="tip-text">All sprint tasks tracked in real-time. Click a task to expand its description. Toggle between list and kanban board views. Status: pending, in progress, in review, or completed.</span></span></span>
+        <span id="task-count"></span>
+        <button class="view-toggle" id="view-toggle">Board</button>
+      </div>
+      <div class="tasks-list" id="tasks-list">
+        <div class="empty-state">Waiting for sprint to start...</div>
+      </div>
+    </div>
+
+    <div class="resize-v" id="resize-v"></div>
+
+    <div class="panel messages-panel">
+      <div class="panel-header">
+        <span>Messages <span class="info-tip">i<span class="tip-text">Inter-agent communication feed. Shows all messages between PM, Manager, and Engineers. Protocol tags (TASK_ASSIGNED, READY_FOR_REVIEW, etc.) indicate structured workflow events.</span></span></span>
+        <span id="msg-count"></span>
+      </div>
+      <div class="messages-list" id="messages-list">
+        <div class="empty-state" id="msg-empty">No messages yet</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const WS_URL = 'ws://' + location.host;
+  let ws = null;
+  let reconnectDelay = 500;
+  let currentPhase = 'setup';
+
+  const state = { agents: [], tasks: [], messages: [], teamName: null, paused: false, escalation: null, mode: 'manual', cycle: 0, phase: 'idle' };
+  const reviewTaskIds = new Set();
+  let taskView = 'list'; // 'list' | 'board'
+  const setupConfig = { engineers: 1, includePM: false, cycles: 1 };
+
+  const $ = (id) => document.getElementById(id);
+
+  // Sprint phase elements (lazy, resolved after phase switch)
+  let banner, tasksList, messagesList, teamNameEl, taskCountEl, msgCountEl, pauseBtn, escalationBar, escalationText, escalationDismiss, cycleIndicator, stopBtn, viewToggle, sprintModeEl;
+
+  function bindSprintElements() {
+    banner = $('banner');
+    tasksList = $('tasks-list');
+    messagesList = $('messages-list');
+    teamNameEl = $('team-name');
+    taskCountEl = $('task-count');
+    msgCountEl = $('msg-count');
+    pauseBtn = $('pause-btn');
+    escalationBar = $('escalation-bar');
+    escalationText = $('escalation-text');
+    escalationDismiss = $('escalation-dismiss');
+    cycleIndicator = $('cycle-indicator');
+    stopBtn = $('stop-btn');
+    viewToggle = $('view-toggle');
+    sprintModeEl = $('sprint-mode');
+
+    pauseBtn.addEventListener('click', () => { fetch('/api/pause', { method: 'POST' }); });
+    escalationDismiss.addEventListener('click', () => { fetch('/api/dismiss-escalation', { method: 'POST' }); });
+    stopBtn.addEventListener('click', async () => {
+      stopBtn.disabled = true;
+      await fetch('/api/stop', { method: 'POST' });
+      stopBtn.disabled = false;
+      switchPhase('setup');
+    });
+    viewToggle.addEventListener('click', () => {
+      taskView = taskView === 'list' ? 'board' : 'list';
+      viewToggle.textContent = taskView === 'list' ? 'Board' : 'List';
+      renderTasks();
+    });
+
+    initResizeHandles();
+  }
+
+  function initResizeHandles() {
+    const container = $('sprint-container');
+    const hHandle = $('resize-h');
+    const vHandle = $('resize-v');
+
+    // Horizontal resize (sidebar width)
+    let draggingH = false;
+    hHandle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      draggingH = true;
+      hHandle.classList.add('active');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    });
+
+    // Vertical resize (messages height)
+    let draggingV = false;
+    vHandle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      draggingV = true;
+      vHandle.classList.add('active');
+      document.body.style.cursor = 'row-resize';
+      document.body.style.userSelect = 'none';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (draggingH) {
+        const rect = container.getBoundingClientRect();
+        const w = Math.max(200, Math.min(e.clientX - rect.left, rect.width - 200));
+        container.style.setProperty('--sidebar-w', w + 'px');
+      }
+      if (draggingV) {
+        const rect = container.getBoundingClientRect();
+        const msgH = Math.max(120, Math.min(rect.bottom - e.clientY, rect.height - 200));
+        container.style.setProperty('--msg-h', msgH + 'px');
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (draggingH) { draggingH = false; hHandle.classList.remove('active'); }
+      if (draggingV) { draggingV = false; vHandle.classList.remove('active'); }
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    });
+  }
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text) e.textContent = text;
+    return e;
+  }
+
+  function extractTaskIdFromProtocol(content) {
+    const m = content.match(/^[A-Z_]+:\s*#?(\d+)/);
+    return m ? m[1] : null;
+  }
+
+  // --- Phase Management ---
+
+  function switchPhase(phase) {
+    currentPhase = phase;
+    $('setup-phase').style.display = phase === 'setup' ? '' : 'none';
+    $('sprint-phase').style.display = phase === 'sprint' ? '' : 'none';
+    if (phase === 'sprint') {
+      bindSprintElements();
+      renderAll();
+    }
+    if (phase === 'setup') renderSetupPreview();
+  }
+
+  // --- Setup Phase ---
+
+  function initSetup() {
+    $('eng-minus').addEventListener('click', () => {
+      if (setupConfig.engineers > 0) { setupConfig.engineers--; updateSetup(); }
+    });
+    $('eng-plus').addEventListener('click', () => {
+      if (setupConfig.engineers < 5) { setupConfig.engineers++; updateSetup(); }
+    });
+    $('pm-toggle').addEventListener('click', () => {
+      setupConfig.includePM = !setupConfig.includePM;
+      updateSetup();
+    });
+    $('cyc-minus').addEventListener('click', () => {
+      if (setupConfig.cycles > 1) { setupConfig.cycles--; updateSetup(); }
+    });
+    $('cyc-plus').addEventListener('click', () => {
+      if (setupConfig.cycles < 10) { setupConfig.cycles++; updateSetup(); }
+    });
+    $('launch-btn').addEventListener('click', handleLaunch);
+    renderSetupPreview();
+  }
+
+  function updateSetup() {
+    $('eng-count').textContent = setupConfig.engineers === 0 ? 'Auto' : setupConfig.engineers;
+    const pmBtn = $('pm-toggle');
+    pmBtn.textContent = setupConfig.includePM ? 'On' : 'Off';
+    pmBtn.classList.toggle('active', setupConfig.includePM);
+    const modeEl = $('setup-mode');
+    const modeTip = modeEl.querySelector('.info-tip');
+    modeEl.textContent = '';
+    modeEl.appendChild(document.createTextNode(setupConfig.includePM ? 'Autonomous mode' : 'Manual mode'));
+    if (modeTip) { modeEl.appendChild(document.createTextNode(' ')); modeEl.appendChild(modeTip); }
+    $('roadmap-panel').classList.toggle('optional', setupConfig.includePM);
+    $('cycles-control').style.display = setupConfig.includePM ? '' : 'none';
+    $('cyc-count').textContent = setupConfig.cycles;
+    renderSetupPreview();
+  }
+
+  async function handleLaunch() {
+    const btn = $('launch-btn');
+    const roadmap = $('roadmap-input').value.trim();
+
+    if (!setupConfig.includePM && !roadmap) {
+      $('roadmap-input').focus();
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Launching...';
+
+    try {
+      const res = await fetch('/api/launch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roadmap, engineers: setupConfig.engineers, includePM: setupConfig.includePM, cycles: setupConfig.includePM ? setupConfig.cycles : 1 }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || 'Launch failed');
+      }
+    } catch (e) {
+      alert('Failed to connect to server');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Launch Sprint';
+    }
+  }
+
+  // --- Setup SVG Preview ---
+
+  // --- Display Names ---
+  const ENGINEER_POOL = ['Ada', 'Kai', 'Zoe', 'Leo', 'Mia', 'Rex', 'Eve', 'Max', 'Ivy', 'Rio'];
+  const nameCache = {};
+
+  function displayName(agentName) {
+    if (!agentName) return '\u2014';
+    if (nameCache[agentName]) return nameCache[agentName];
+    let name;
+    if (agentName === 'sprint-pm') name = 'PM';
+    else if (agentName === 'sprint-manager') name = 'Manager';
+    else if (agentName === 'sprint-engineer') name = ENGINEER_POOL[0];
+    else {
+      const m = agentName.match(/^sprint-engineer-(\d+)$/);
+      name = m ? ENGINEER_POOL[(parseInt(m[1], 10) - 1) % ENGINEER_POOL.length] : agentName;
+    }
+    nameCache[agentName] = name;
+    return name;
+  }
+
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+
+  function svgEl(tag, attrs) {
+    const e = document.createElementNS(SVG_NS, tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
+    return e;
+  }
+
+  function createSetupNode(svg, cx, cy, label, stroke, fill) {
+    svg.appendChild(svgEl('circle', { cx, cy, r: 28, fill, stroke, 'stroke-width': '2', opacity: '0.9' }));
+    const lbl = svgEl('text', { class: 'node-label', x: cx, y: cy + 4, 'text-anchor': 'middle' });
+    lbl.textContent = label;
+    svg.appendChild(lbl);
+  }
+
+  function renderSetupPreview() {
+    const svg = $('setup-svg');
+    svg.textContent = '';
+
+    const n = setupConfig.engineers;
+    const hasPM = setupConfig.includePM;
+    const nodeSpacing = 90;
+    const R = 28;
+    const displayCount = n === 0 ? 1 : n; // auto mode shows one placeholder node
+    const width = Math.max(300, displayCount * nodeSpacing + 100);
+    const centerX = width / 2;
+
+    let mgrY, engY, height;
+    if (hasPM) {
+      const pmY = 44;
+      mgrY = 130;
+      engY = 216;
+      height = 260;
+
+      svg.appendChild(svgEl('path', {
+        d: `M ${centerX} ${pmY + R} L ${centerX} ${mgrY - R}`,
+        stroke: '#334155', 'stroke-width': '1.5', fill: 'none', 'stroke-dasharray': '4 4'
+      }));
+      createSetupNode(svg, centerX, pmY, 'PM', '#a78bfa', '#2e1065');
+    } else {
+      mgrY = 60;
+      engY = 170;
+      height = 216;
+    }
+
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    createSetupNode(svg, centerX, mgrY, 'MGR', '#3b82f6', '#1e3a5f');
+
+    if (n === 0) {
+      // Auto mode: show dashed path to a "N" placeholder
+      svg.appendChild(svgEl('path', {
+        d: `M ${centerX} ${mgrY + R} L ${centerX} ${engY - R}`,
+        stroke: '#334155', 'stroke-width': '1.5', fill: 'none', 'stroke-dasharray': '4 4'
+      }));
+      createSetupNode(svg, centerX, engY, 'N', '#22c55e', '#14332a');
+    } else {
+      const totalW = (n - 1) * nodeSpacing;
+      const startX = centerX - totalW / 2;
+
+      for (let i = 0; i < n; i++) {
+        const ex = startX + i * nodeSpacing;
+        const label = n === 1 ? 'ENG' : `E${i + 1}`;
+
+        svg.appendChild(svgEl('path', {
+          d: `M ${centerX} ${mgrY + R} C ${centerX} ${(mgrY + engY) / 2}, ${ex} ${(mgrY + engY) / 2}, ${ex} ${engY - R}`,
+          stroke: '#334155', 'stroke-width': '1.5', fill: 'none', 'stroke-dasharray': '4 4'
+        }));
+        createSetupNode(svg, ex, engY, label, '#22c55e', '#14332a');
+      }
+    }
+  }
+
+  // --- Sprint Phase: Agent Node Rendering ---
+
+  function createAgentNode(svg, cx, cy, label, role, stroke, fill, key) {
+    svg.appendChild(svgEl('circle', { id: 'pulse-' + key, class: 'pulse-ring', cx, cy, r: 38, fill: 'none', stroke, 'stroke-width': '2' }));
+    svg.appendChild(svgEl('circle', { cx, cy, r: 32, fill, stroke, 'stroke-width': '2' }));
+    const lbl = svgEl('text', { class: 'node-label', x: cx, y: cy - 3, 'text-anchor': 'middle' });
+    lbl.textContent = label;
+    svg.appendChild(lbl);
+    const rl = svgEl('text', { class: 'node-role', x: cx, y: cy + 10, 'text-anchor': 'middle' });
+    rl.textContent = role;
+    svg.appendChild(rl);
+    svg.appendChild(svgEl('circle', { id: 'status-' + key, cx: cx + 24, cy: cy - 24, r: 5, fill: '#22c55e' }));
+  }
+
+  function renderAgents() {
+    const svg = $('agents-svg');
+    if (!svg) return;
+    svg.textContent = '';
+
+    // Loading state: no agents detected yet
+    if (!state.agents.length) {
+      svg.style.display = 'none';
+      let loader = svg.parentElement.querySelector('.loading-state');
+      if (!loader) {
+        loader = el('div', 'loading-state');
+        const dots = el('div', 'loading-dots');
+        dots.appendChild(el('span')); dots.appendChild(el('span')); dots.appendChild(el('span'));
+        loader.appendChild(dots);
+        loader.appendChild(el('span', null, 'Initializing team...'));
+        svg.parentElement.appendChild(loader);
+      }
+      return;
+    }
+
+    // Remove loading state if present
+    svg.style.display = '';
+    const loader = svg.parentElement.querySelector('.loading-state');
+    if (loader) loader.remove();
+
+    const hasPM = state.agents.some(a => a.name === 'sprint-pm');
+    const engineers = state.agents.filter(a =>
+      a.name === 'sprint-engineer' || /^sprint-engineer-\d+$/.test(a.name)
+    );
+    const engCount = Math.max(engineers.length, 1);
+
+    const nodeSpacing = 100;
+    const width = Math.max(280, engCount * nodeSpacing + 80);
+    const centerX = width / 2;
+
+    let mgrY, engY;
+    if (hasPM) {
+      const pmY = 80;
+      mgrY = 200;
+      engY = 320;
+      svg.setAttribute('viewBox', `0 0 ${width} 400`);
+
+      svg.appendChild(svgEl('path', {
+        id: 'path-pm-manager',
+        d: `M ${centerX} ${pmY + 32} C ${centerX} ${(pmY + mgrY) / 2}, ${centerX} ${(pmY + mgrY) / 2}, ${centerX} ${mgrY - 32}`,
+        stroke: '#334155', 'stroke-width': '2', fill: 'none', 'stroke-dasharray': '4 4'
+      }));
+      createAgentNode(svg, centerX, pmY, 'PM', 'product mgr', '#a78bfa', '#2e1065', 'pm');
+    } else {
+      mgrY = 100;
+      engY = 260;
+      svg.setAttribute('viewBox', `0 0 ${width} 340`);
+    }
+
+    createAgentNode(svg, centerX, mgrY, 'MGR', 'manager', '#3b82f6', '#1e3a5f', 'manager');
+
+    const totalW = (engCount - 1) * nodeSpacing;
+    const startX = centerX - totalW / 2;
+
+    for (let i = 0; i < engCount; i++) {
+      const ex = startX + i * nodeSpacing;
+      const key = engCount === 1 ? 'engineer' : `engineer-${i + 1}`;
+      const engName = engCount === 1 ? 'sprint-engineer' : `sprint-engineer-${i + 1}`;
+      const label = displayName(engName);
+
+      svg.appendChild(svgEl('path', {
+        id: `path-mgr-eng-${i}`,
+        d: `M ${centerX} ${mgrY + 32} C ${centerX} ${(mgrY + engY) / 2}, ${ex} ${(mgrY + engY) / 2}, ${ex} ${engY - 32}`,
+        stroke: '#334155', 'stroke-width': '2', fill: 'none', 'stroke-dasharray': '4 4'
+      }));
+      createAgentNode(svg, ex, engY, label, 'engineer', '#22c55e', '#14332a', key);
+    }
+
+    // Animation dots
+    if (hasPM) {
+      svg.appendChild(svgEl('circle', { id: 'dot-pm-mgr', r: 4, fill: '#a78bfa', opacity: '0' }));
+      svg.appendChild(svgEl('circle', { id: 'dot-mgr-pm', r: 4, fill: '#60a5fa', opacity: '0' }));
+    }
+    for (let i = 0; i < engCount; i++) {
+      svg.appendChild(svgEl('circle', { id: `dot-mgr-eng-${i}`, r: 4, fill: '#60a5fa', opacity: '0' }));
+      svg.appendChild(svgEl('circle', { id: `dot-eng-mgr-${i}`, r: 4, fill: '#4ade80', opacity: '0' }));
+    }
+  }
+
+  // --- Connection ---
+
+  function connect() {
+    ws = new WebSocket(WS_URL);
+    ws.onopen = () => {
+      reconnectDelay = 500;
+      if (currentPhase === 'sprint') showBanner('Connected', 'connected', 1500);
+    };
+    ws.onclose = () => {
+      if (currentPhase === 'sprint') showBanner('Disconnected — reconnecting...', 'disconnected');
+      setTimeout(connect, reconnectDelay);
+      reconnectDelay = Math.min(reconnectDelay * 2, 10000);
+    };
+    ws.onmessage = (e) => handleEvent(JSON.parse(e.data));
+  }
+
+  function handleEvent(event) {
+    switch (event.type) {
+      case 'init':
+        Object.assign(state, event.state);
+        reviewTaskIds.clear();
+        if (event.state.reviewTaskIds) event.state.reviewTaskIds.forEach(id => reviewTaskIds.add(id));
+        if (state.teamName && currentPhase === 'setup') switchPhase('sprint');
+        if (currentPhase === 'sprint') renderAll();
+        break;
+      case 'task_updated':
+        upsertTask(event.task);
+        if (event.task.status === 'completed') reviewTaskIds.delete(event.task.id);
+        if (currentPhase === 'sprint') renderTasks();
+        break;
+      case 'message_sent':
+        state.messages.push(event.message);
+        if (event.message.protocol) {
+          const tid = extractTaskIdFromProtocol(event.message.content);
+          if (tid) {
+            if (event.message.protocol === 'READY_FOR_REVIEW') reviewTaskIds.add(tid);
+            else if (event.message.protocol === 'APPROVED' || event.message.protocol === 'REQUEST_CHANGES') reviewTaskIds.delete(tid);
+          }
+        }
+        if (currentPhase === 'sprint') {
+          renderNewMessage(event.message);
+          animateMessageFlow(event.message);
+          if (event.message.protocol) renderTasks();
+        }
+        break;
+      case 'agent_status':
+        updateAgentStatus(event.agent);
+        break;
+      case 'paused':
+        state.paused = event.paused;
+        if (currentPhase === 'sprint') renderPauseState();
+        break;
+      case 'escalation':
+        state.escalation = event.escalation;
+        if (currentPhase === 'sprint') renderEscalation();
+        break;
+      case 'cycle_info':
+        state.cycle = event.cycle;
+        state.phase = event.phase;
+        state.mode = event.mode;
+        if (currentPhase === 'sprint') {
+          if (sprintModeEl) sprintModeEl.textContent = state.mode === 'autonomous' ? 'Autonomous' : 'Manual';
+          renderCycleIndicator();
+          renderTasks();
+        }
+        break;
+      case 'process_started':
+        switchPhase('sprint');
+        break;
+      case 'process_exited':
+        // Keep sprint phase visible so user can see final state
+        break;
+    }
+  }
+
+  function upsertTask(task) {
+    const idx = state.tasks.findIndex(t => t.id === task.id);
+    if (idx >= 0) state.tasks[idx] = task; else state.tasks.push(task);
+  }
+
+  function updateAgentStatus(agent) {
+    const idx = state.agents.findIndex(a => a.name === agent.name);
+    if (idx >= 0) state.agents[idx] = agent;
+    if (currentPhase === 'sprint') renderAgentStatus();
+  }
+
+  // --- Rendering ---
+
+  function renderAll() {
+    if (!teamNameEl) return;
+    teamNameEl.textContent = state.teamName || '';
+    if (sprintModeEl) sprintModeEl.textContent = state.mode === 'autonomous' ? 'Autonomous' : 'Manual';
+    renderAgents();
+    renderTasks();
+    renderMessages();
+    renderAgentStatus();
+    renderPauseState();
+    renderEscalation();
+    renderCycleIndicator();
+  }
+
+  function renderPauseState() {
+    if (!pauseBtn) return;
+    pauseBtn.textContent = state.paused ? 'Resume' : 'Pause';
+    pauseBtn.classList.toggle('paused', state.paused);
+  }
+
+  function renderEscalation() {
+    if (!escalationBar) return;
+    if (state.escalation) {
+      escalationText.textContent = '';
+      const strong = el('strong', null, 'ESCALATION #' + state.escalation.taskId);
+      escalationText.appendChild(strong);
+      escalationText.appendChild(document.createTextNode(' from ' + state.escalation.from + ' — ' + state.escalation.reason));
+      escalationBar.classList.add('visible');
+    } else {
+      escalationBar.classList.remove('visible');
+    }
+  }
+
+  function renderCycleIndicator() {
+    if (!cycleIndicator) return;
+    cycleIndicator.textContent = '';
+    if (state.mode === 'autonomous' && state.cycle > 0) {
+      cycleIndicator.appendChild(document.createTextNode('Cycle ' + state.cycle + ' \u00b7 ' + state.phase + ' '));
+      const tip = el('span', 'info-tip', 'i');
+      const tipText = el('span', 'tip-text', 'Current sprint cycle and phase. Each cycle follows: PM plans roadmap, Manager delegates tasks, Engineers execute, PM reviews results before starting the next cycle.');
+      tip.appendChild(tipText);
+      cycleIndicator.appendChild(tip);
+    }
+  }
+
+  function renderTasks() {
+    if (!tasksList) return;
+    const total = state.tasks.filter(t => t.status !== 'deleted').length;
+    const completed = state.tasks.filter(t => t.status === 'completed').length;
+    taskCountEl.textContent = total ? completed + '/' + total : '';
+
+    tasksList.textContent = '';
+    tasksList.classList.toggle('board', taskView === 'board');
+
+    if (!total) {
+      renderTasksEmpty();
+      return;
+    }
+
+    if (taskView === 'board') {
+      renderTasksBoard();
+    } else {
+      renderTasksList();
+    }
+  }
+
+  function renderTasksEmpty() {
+    if (state.mode === 'autonomous' && state.phase === 'analyzing') {
+      const wrapper = el('div', 'phase-indicator');
+      const dots = el('div', 'loading-dots');
+      dots.appendChild(el('span')); dots.appendChild(el('span')); dots.appendChild(el('span'));
+      wrapper.appendChild(dots);
+      wrapper.appendChild(el('div', 'phase-title', 'PM is analyzing the codebase'));
+      wrapper.appendChild(el('div', 'phase-desc', 'Exploring the repository, identifying patterns, and preparing the sprint roadmap...'));
+      tasksList.appendChild(wrapper);
+    } else if (state.phase === 'sprinting') {
+      const wrapper = el('div', 'phase-indicator');
+      const dots = el('div', 'loading-dots');
+      dots.appendChild(el('span')); dots.appendChild(el('span')); dots.appendChild(el('span'));
+      wrapper.appendChild(dots);
+      wrapper.appendChild(el('div', 'phase-title', 'Manager is preparing tasks'));
+      wrapper.appendChild(el('div', 'phase-desc', 'Roadmap received — breaking down work into actionable tasks...'));
+      tasksList.appendChild(wrapper);
+    } else {
+      tasksList.appendChild(el('div', 'empty-state', 'Waiting for tasks...'));
+    }
+  }
+
+  function renderTasksList() {
+    for (const t of state.tasks) {
+      if (t.status === 'deleted') continue;
+      const row = el('div', 'task-row');
+
+      row.appendChild(el('span', 'task-chevron', '\u25B6'));
+      row.appendChild(el('span', 'task-id', '#' + t.id));
+
+      const blocked = t.blockedBy && t.blockedBy.length > 0;
+      const statusClass = blocked ? 'blocked' : t.status;
+      row.appendChild(el('span', 'status-badge status-' + statusClass));
+
+      row.appendChild(el('span', 'task-subject', t.subject));
+      row.appendChild(el('span', 'task-owner', displayName(t.owner)));
+
+      if (t.description) {
+        const desc = el('div', 'task-desc', t.description);
+        row.appendChild(desc);
+        row.addEventListener('click', () => row.classList.toggle('expanded'));
+      }
+
+      tasksList.appendChild(row);
+    }
+  }
+
+  function renderTasksBoard() {
+    const columns = [
+      { key: 'todo', label: 'To Do', color: 'var(--text-muted)', tasks: [] },
+      { key: 'progress', label: 'In Progress', color: 'var(--amber)', tasks: [] },
+      { key: 'review', label: 'In Review', color: 'var(--blue)', tasks: [] },
+      { key: 'done', label: 'Done', color: 'var(--green)', tasks: [] },
+    ];
+
+    for (const t of state.tasks) {
+      if (t.status === 'deleted') continue;
+      if (t.status === 'completed') columns[3].tasks.push(t);
+      else if (t.status === 'in_progress' && reviewTaskIds.has(t.id)) columns[2].tasks.push(t);
+      else if (t.status === 'in_progress') columns[1].tasks.push(t);
+      else columns[0].tasks.push(t);
+    }
+
+    for (const col of columns) {
+      const colDiv = el('div', 'kanban-col');
+
+      const hdr = el('div', 'kanban-hdr');
+      const dot = el('span', 'kanban-dot');
+      dot.style.background = col.color;
+      hdr.appendChild(dot);
+      hdr.appendChild(document.createTextNode(col.label));
+      hdr.appendChild(el('span', 'kanban-count', String(col.tasks.length)));
+      colDiv.appendChild(hdr);
+
+      const body = el('div', 'kanban-body');
+
+      for (const t of col.tasks) {
+        const card = el('div', 'kanban-card col-' + col.key);
+        const blocked = t.blockedBy && t.blockedBy.length > 0;
+        if (blocked) card.classList.add('blocked');
+
+        const top = el('div', 'card-top');
+        top.appendChild(el('span', 'card-id', '#' + t.id));
+        if (blocked) top.appendChild(el('span', 'card-blocked', 'BLOCKED'));
+        card.appendChild(top);
+
+        card.appendChild(el('div', 'card-subject', t.subject));
+        if (t.owner) card.appendChild(el('div', 'card-owner', displayName(t.owner)));
+
+        if (t.description) {
+          card.appendChild(el('div', 'card-desc', t.description));
+          card.addEventListener('click', () => card.classList.toggle('expanded'));
+        }
+
+        body.appendChild(card);
+      }
+
+      colDiv.appendChild(body);
+      tasksList.appendChild(colDiv);
+    }
+  }
+
+  function renderMessages() {
+    if (!messagesList) return;
+    messagesList.textContent = '';
+    if (!state.messages.length) {
+      messagesList.appendChild(el('div', 'empty-state', 'No messages yet'));
+      return;
+    }
+    for (const m of state.messages) renderNewMessage(m, false);
+    scrollMessages();
+  }
+
+  function classifySender(from) {
+    if (from === 'sprint-pm') return 'pm';
+    if (from.includes('manager')) return 'manager';
+    if (from.includes('engineer')) return 'engineer';
+    return 'system';
+  }
+
+  function renderNewMessage(msg, scroll) {
+    if (!messagesList) return;
+    const empty = messagesList.querySelector('.empty-state');
+    if (empty) empty.remove();
+
+    msgCountEl.textContent = String(state.messages.length);
+
+    const row = el('div', 'msg-row');
+
+    const time = new Date(msg.timestamp).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    row.appendChild(el('span', 'msg-time', time));
+
+    row.appendChild(el('span', 'msg-sender ' + classifySender(msg.from), displayName(msg.from)));
+
+    const contentSpan = el('span', 'msg-content');
+    if (msg.protocol) {
+      contentSpan.appendChild(el('span', 'msg-protocol proto-' + msg.protocol, msg.protocol));
+      contentSpan.appendChild(document.createTextNode(' ' + (msg.content || '').replace(/^[A-Z_]+:\s*/, '')));
+    } else {
+      contentSpan.textContent = msg.content || '';
+    }
+    row.appendChild(contentSpan);
+
+    messagesList.appendChild(row);
+    if (scroll !== false) scrollMessages();
+  }
+
+  function scrollMessages() { if (messagesList) messagesList.scrollTop = messagesList.scrollHeight; }
+
+  function renderAgentStatus() {
+    for (const agent of state.agents) {
+      let key;
+      if (agent.name === 'sprint-pm') key = 'pm';
+      else if (agent.name.includes('manager')) key = 'manager';
+      else if (agent.name === 'sprint-engineer') key = 'engineer';
+      else {
+        const m = agent.name.match(/^sprint-engineer-(\d+)$/);
+        if (m) key = `engineer-${m[1]}`;
+        else continue;
+      }
+      const statusDot = $('status-' + key);
+      const pulseRing = $('pulse-' + key);
+      if (statusDot) statusDot.setAttribute('fill', agent.status === 'active' ? '#22c55e' : '#475569');
+      if (pulseRing) pulseRing.classList.toggle('idle', agent.status !== 'active');
+    }
+  }
+
+  // --- Message flow animation ---
+
+  function animateDotAlongPath(dotId, pathId, reverse) {
+    const dot = $(dotId);
+    const path = $(pathId);
+    if (!dot || !path) return;
+
+    const length = path.getTotalLength();
+    let start = null;
+    const duration = 600;
+
+    function step(ts) {
+      if (!start) start = ts;
+      const progress = Math.min((ts - start) / duration, 1);
+      const pct = reverse ? 1 - progress : progress;
+      const point = path.getPointAtLength(pct * length);
+      dot.setAttribute('cx', point.x);
+      dot.setAttribute('cy', point.y);
+      dot.setAttribute('opacity', String(progress < 0.1 ? progress / 0.1 : progress > 0.9 ? (1 - progress) / 0.1 : 1));
+      if (progress < 1) requestAnimationFrame(step);
+      else dot.setAttribute('opacity', '0');
+    }
+
+    requestAnimationFrame(step);
+  }
+
+  function animateMessageFlow(msg) {
+    const hasPM = state.agents.some(a => a.name === 'sprint-pm');
+    const engineers = state.agents.filter(a =>
+      a.name === 'sprint-engineer' || /^sprint-engineer-\d+$/.test(a.name)
+    );
+
+    function engIndex(name) {
+      if (engineers.length <= 1) return 0;
+      const m = name.match(/sprint-engineer-(\d+)/);
+      return m ? parseInt(m[1], 10) - 1 : 0;
+    }
+
+    const fromPM = msg.from === 'sprint-pm';
+    const fromMgr = msg.from.includes('manager');
+    const fromEng = msg.from.includes('engineer') && !msg.from.includes('manager');
+    const toPM = msg.to === 'sprint-pm';
+    const toMgr = msg.to.includes('manager');
+    const toEng = msg.to.includes('engineer') && !msg.to.includes('manager');
+
+    if (hasPM && fromPM && toMgr) {
+      animateDotAlongPath('dot-pm-mgr', 'path-pm-manager', false);
+    } else if (hasPM && fromMgr && toPM) {
+      animateDotAlongPath('dot-mgr-pm', 'path-pm-manager', true);
+    } else if (fromMgr && toEng) {
+      const idx = engIndex(msg.to);
+      animateDotAlongPath(`dot-mgr-eng-${idx}`, `path-mgr-eng-${idx}`, false);
+    } else if (fromEng && toMgr) {
+      const idx = engIndex(msg.from);
+      animateDotAlongPath(`dot-eng-mgr-${idx}`, `path-mgr-eng-${idx}`, true);
+    }
+  }
+
+  function showBanner(text, type, autoHide) {
+    if (!banner) return;
+    banner.textContent = text;
+    banner.className = 'banner ' + type;
+    if (autoHide) setTimeout(() => banner.classList.add('hidden'), autoHide);
+  }
+
+  // --- Init ---
+
+  async function init() {
+    initSetup();
+    connect();
+
+    // Check if sprint is already running
+    try {
+      const res = await fetch('/api/process-status');
+      const data = await res.json();
+      if (data.running) switchPhase('sprint');
+    } catch {}
+  }
+
+  init();
+</script>
+</body>
+</html>

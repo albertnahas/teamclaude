@@ -1,0 +1,8 @@
+{
+  "name": "teamclaude",
+  "version": "0.1.0",
+  "description": "Autonomous sprint plugin — real-time visualization of Claude Code agent teams",
+  "commands": "commands",
+  "agents": "agents",
+  "skills": "skills"
+}
