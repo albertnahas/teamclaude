@@ -116,7 +116,7 @@ If the user chooses "Edit tasks", gather their feedback, adjust the task list, a
 ### Step 4: Start Visualization Server
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/dist/server.js" --port ${PORT:-3456} &
+npx teamclaude start --port ${PORT:-3456} &
 ```
 
 Save the PID and wait for startup:
@@ -213,7 +213,7 @@ rm -f /tmp/sprint-visualizer.pid
 ### Step A1: Start Visualization Server
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/dist/server.js" --port ${PORT:-3456} &
+npx teamclaude start --port ${PORT:-3456} &
 ```
 
 Save the PID and wait for startup:

@@ -10,28 +10,24 @@
   "files": [
     "dist",
     "bin",
-    "server/ui.html",
     "agents",
     "commands",
     "skills",
-    ".claude-plugin",
     ".sprint.example.yml",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "esbuild server/index.ts --bundle --platform=node --format=esm --outfile=dist/server.js --external:chokidar --external:ws --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
+    "build": "esbuild server/index.ts --bundle --platform=node --format=esm --outfile=dist/server.js --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\" && cp server/ui.html dist/ui.html",
     "dev": "node --import tsx server/index.ts",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepare": "npm run build"
   },
-  "dependencies": {
-    "chokidar": "^4.0.3",
-    "ws": "^8.18.0"
-  },
   "devDependencies": {
+    "chokidar": "^4.0.3",
+    "ws": "^8.18.0",
     "@types/node": "^22.13.4",
     "@types/ws": "^8.5.14",
     "esbuild": "^0.25.0",

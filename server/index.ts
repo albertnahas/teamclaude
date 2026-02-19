@@ -5,7 +5,8 @@ import {
 } from "node:http";
 import { spawn, type ChildProcess } from "node:child_process";
 import { readFile } from "node:fs";
-import { join } from "node:path";
+import { join, dirname as pathDirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { WebSocketServer } from "ws";
 
@@ -47,7 +48,8 @@ let sprintProcess: {
 // --- HTTP handlers ---
 
 function serveUI(_req: IncomingMessage, res: ServerResponse) {
-  const uiPath = join(import.meta.dirname || __dirname, "ui.html");
+  const uiDir = import.meta.dirname ?? pathDirname(fileURLToPath(import.meta.url));
+  const uiPath = join(uiDir, "ui.html");
   readFile(uiPath, "utf-8", (err, html) => {
     if (err) {
       res.writeHead(500);

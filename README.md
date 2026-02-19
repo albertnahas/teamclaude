@@ -4,11 +4,28 @@ Autonomous sprint plugin for Claude Code. Orchestrates manager + engineer agent 
 
 ## Install
 
+### Option A: npm (recommended)
+
+```bash
+npx teamclaude init        # Scaffold agents/commands/skills into .claude/
+```
+
+Then use `/sprint` in Claude Code.
+
+### Option B: Plugin
+
 ```bash
 claude plugins add albertnahas/teamclaude
 ```
 
-This registers the `/sprint` command, three agent definitions (PM, Manager, Engineer), and the visualization server.
+Auto-registers agents, commands, and skills. Uses `npx teamclaude` for the server.
+
+### Standalone server
+
+```bash
+npx teamclaude start
+npx teamclaude start --port 4000
+```
 
 ## Quick Start
 
@@ -50,15 +67,20 @@ A PM agent analyzes the codebase (reads `CLAUDE.md`, runs tests, scans for TODOs
 - Cycle/phase indicator for autonomous mode
 - Resizable panels, escalation alerts, pause/stop controls
 
-## Standalone Server
-
-Run the visualization server independently (watches any active sprint team):
+## CLI Commands
 
 ```bash
-npx teamclaude start
-npx teamclaude start --port 4000
-npx teamclaude --version
+npx teamclaude start [--port N]     # Start visualization server (default: 3456)
+npx teamclaude init [--global] [--force]  # Scaffold into .claude/
+npx teamclaude --version            # Print version
 ```
+
+### `init` options
+
+| Flag | Effect |
+|------|--------|
+| `--global` | Install to `~/.claude/` instead of `./.claude/` |
+| `--force` | Overwrite existing files |
 
 ## Project Detection
 
