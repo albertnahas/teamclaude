@@ -4,7 +4,7 @@
   "description": "Autonomous sprint plugin for Claude Code — real-time visualization of agent teams",
   "type": "module",
   "bin": {
-    "teamclaude": "./bin/teamclaude.js"
+    "teamclaude": "bin/teamclaude.js"
   },
   "main": "./dist/server.js",
   "files": [
