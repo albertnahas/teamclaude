@@ -1,31 +1,19 @@
 {
   "name": "teamclaude",
-  "description": "Marketplace for the TeamClaude autonomous sprint plugin",
   "owner": {
-    "name": "Albert Nahas",
-    "email": "albert@nahas.dev"
+    "name": "Albert Nahas"
+  },
+  "metadata": {
+    "description": "Autonomous sprint plugin — real-time visualization of Claude Code agent teams"
   },
   "plugins": [
     {
       "name": "teamclaude",
+      "source": "./",
       "description": "Autonomous sprint plugin for Claude Code — orchestrate manager + engineer agent teams with real-time visualization dashboard",
       "version": "0.1.0",
-      "author": {
-        "name": "Albert Nahas",
-        "email": "albert@nahas.dev"
-      },
-      "source": "./",
       "category": "development",
-      "homepage": "https://github.com/albertnahas/teamclaude",
-      "keywords": [
-        "sprint",
-        "agent",
-        "visualization",
-        "autonomous",
-        "team",
-        "kanban",
-        "dashboard"
-      ]
+      "tags": ["sprint", "agent", "visualization", "autonomous", "team", "kanban", "dashboard"]
     }
   ]
 }
