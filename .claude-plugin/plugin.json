@@ -3,21 +3,8 @@
   "version": "0.1.0",
   "description": "Autonomous sprint plugin — real-time visualization of Claude Code agent teams",
   "author": {
-    "name": "Albert Nahas",
-    "email": "albert@nahas.dev"
+    "name": "Albert Nahas"
   },
-  "homepage": "https://github.com/albertnahas/teamclaude",
-  "repository": "https://github.com/albertnahas/teamclaude",
   "license": "MIT",
-  "commands": "commands",
-  "agents": "agents",
-  "skills": "skills",
-  "keywords": [
-    "sprint",
-    "agent",
-    "visualization",
-    "autonomous",
-    "team",
-    "kanban"
-  ]
+  "keywords": ["sprint", "agent", "visualization", "autonomous", "team", "kanban"]
 }
