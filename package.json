@@ -23,7 +23,13 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "prepack": "npm run build",
+    "version": "npm run build",
+    "postversion": "git push && git push --tags",
+    "release:patch": "npm version patch -m 'chore(teamclaude): release v%s'",
+    "release:minor": "npm version minor -m 'chore(teamclaude): release v%s'",
+    "release:major": "npm version major -m 'chore(teamclaude): release v%s'"
   },
   "devDependencies": {
     "chokidar": "^4.0.3",
