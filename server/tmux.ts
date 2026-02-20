@@ -60,6 +60,20 @@ export async function isTmuxAvailable(): Promise<boolean> {
   }
 }
 
+/**
+ * Find an existing sprint tmux session (tc-* prefix).
+ * Returns the session name or null if none found.
+ */
+export async function findSprintSession(): Promise<string | null> {
+  try {
+    const out = await tmux("list-sessions", "-F", "#{session_name}");
+    const sessions = out.trim().split("\n").filter(Boolean);
+    return sessions.find((s) => s.startsWith("tc-")) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function createSession(name: string): Promise<void> {
   await tmux(
     "new-session",

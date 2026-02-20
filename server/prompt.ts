@@ -9,7 +9,9 @@ export function compileSprintPrompt(
 
   let prompt = `You are orchestrating a sprint. A visualization server is already running — do NOT start one.
 
-Use TeamCreate to create a team with team_name "${teamName}".
+IMPORTANT: You must do ALL work yourself. Do NOT spawn helper agents to create tasks or do any setup work. Only spawn the agents listed below.
+
+First, call TeamCreate to create a team with team_name "${teamName}".
 `;
 
   const engineerNames = autoEngineers
@@ -28,7 +30,15 @@ Your workflow:
 
 CRITICAL: You MUST call TaskCreate for every task. The visualization dashboard reads from TaskCreate — messages alone will NOT appear on the board.`;
 
-  const mgrPrompt = `You are the Manager for team "${teamName}".
+  const engineerList = engineerNames.length > 0
+    ? `Available engineers: ${engineerNames.join(", ")}.`
+    : "";
+  const distributionRule = engineerNames.length > 1
+    ? `\nIMPORTANT: Distribute tasks evenly across ALL engineers using round-robin. Do NOT assign all tasks to one engineer.`
+    : "";
+
+  const mgrPromptAuto = `You are the Manager for team "${teamName}".
+${engineerList}
 
 Your workflow:
 1. Wait for the PM's "ROADMAP_READY" message
@@ -37,7 +47,19 @@ Your workflow:
 4. When an engineer sends "READY_FOR_REVIEW: #id", review their work
 5. Send "APPROVED: #id" or "REQUEST_CHANGES: #id — feedback" back
 6. When ALL tasks have status completed, send "SPRINT_COMPLETE" to team-lead
+${distributionRule}
+CRITICAL: Use TaskUpdate for all status changes. Use TaskList to monitor progress.`;
 
+  const mgrPromptManual = `You are the Manager for team "${teamName}".
+${engineerList}
+
+Your workflow:
+1. Call TaskList to see all created tasks
+2. For each task: call TaskUpdate to set owner to an engineer name, then send "TASK_ASSIGNED: #id — subject" to that engineer
+3. When an engineer sends "READY_FOR_REVIEW: #id", review their work
+4. Send "APPROVED: #id" or "REQUEST_CHANGES: #id — feedback" back
+5. When ALL tasks have status completed, send "SPRINT_COMPLETE" to team-lead
+${distributionRule}
 CRITICAL: Use TaskUpdate for all status changes. Use TaskList to monitor progress.`;
 
   const engPrompt = (name: string) => `You are engineer "${name}" for team "${teamName}".
@@ -63,7 +85,7 @@ ${pmPrompt}
 ### sprint-manager (subagent_type: sprint-manager)
 Prompt:
 """
-${mgrPrompt}
+${mgrPromptAuto}
 """
 `;
     if (autoEngineers) {
@@ -84,9 +106,6 @@ ${engPrompt(name)}
 """
 `;
       }
-      if (engineers > 1) {
-        prompt += `\nIMPORTANT: With ${engineers} engineers, assign tasks in parallel across all engineers.`;
-      }
     }
 
     if (cycles > 1) {
@@ -97,12 +116,18 @@ After each cycle, the manager sends "CYCLE_COMPLETE: cycle N" to the PM. The PM 
     }
   } else {
     prompt += `
-This is MANUAL mode. Parse the roadmap below into tasks using TaskCreate, then spawn agents with the EXACT prompts below.
+This is MANUAL mode. Follow these steps IN ORDER. You have access to TaskCreate after calling TeamCreate.
 
-### sprint-manager (subagent_type: sprint-manager)
+## Step 1: Create ALL tasks yourself
+After TeamCreate, call TaskCreate once per task. Parse the roadmap below and create one task for each item. You MUST do this yourself — do NOT spawn any agent to create tasks for you.
+
+## Step 2: Spawn ONLY these agents
+After ALL tasks exist, spawn ONLY the agents listed below. No other agents.
+
+### sprint-manager (subagent_type: sprint-manager, name: sprint-manager)
 Prompt:
 """
-${mgrPrompt}
+${mgrPromptManual}
 """
 `;
     if (autoEngineers) {
@@ -116,7 +141,7 @@ ${engPrompt("sprint-engineer-N")}
     } else {
       for (const name of engineerNames) {
         prompt += `
-### ${name} (subagent_type: sprint-engineer)
+### ${name} (subagent_type: sprint-engineer, name: ${name})
 Prompt:
 """
 ${engPrompt(name)}
@@ -126,6 +151,10 @@ ${engPrompt(name)}
     }
 
     prompt += `
+
+## Step 3: Monitor
+After spawning all agents, wait for the manager to send "SPRINT_COMPLETE". Then you are done.
+
 ## Roadmap
 ${roadmap}`;
   }

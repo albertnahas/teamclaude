@@ -11,6 +11,7 @@ import { homedir } from "node:os";
 import { WebSocketServer } from "ws";
 
 import { state, clients, broadcast, resetState, detectProjectName } from "./state.js";
+import { loadPersistedState, flushSave } from "./persistence.js";
 import { startWatching, setTeamDiscoveredHook } from "./watcher.js";
 import { compileSprintPrompt } from "./prompt.js";
 import { recordSprintCompletion, loadSprintHistory } from "./analytics.js";
@@ -136,8 +137,14 @@ async function launchViaTmux(
   await tmux.createSession(sessionName);
   state.tmuxSessionName = sessionName;
 
-  // Send the claude command into pane 0
-  const cmd = `claude -p ${shellEscape(prompt)} --permission-mode bypassPermissions`;
+  // Write prompt to a temp file to avoid tmux send-keys buffer limits
+  const tmpDir = join(homedir(), ".claude");
+  const promptFile = join(tmpDir, `sprint-prompt-${sessionName}.txt`);
+  const { writeFileSync } = await import("node:fs");
+  writeFileSync(promptFile, prompt, "utf-8");
+
+  // Build a short command that reads the prompt from file
+  const cmd = `unset CLAUDECODE && claude -p "$(cat ${shellEscape(promptFile)})" --permission-mode bypassPermissions; rm -f ${shellEscape(promptFile)}`;
   await tmux.sendKeys(`${sessionName}:0.0`, cmd);
   await tmux.sendSpecialKey(`${sessionName}:0.0`, "Enter");
 
@@ -300,9 +307,10 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
     res.writeHead(200, { "Content-Type": "application/json", ...cors });
     res.end(
       JSON.stringify({
-        running: !!sprintProcess,
+        running: !!sprintProcess || !!state.tmuxSessionName,
         pid: sprintProcess?.pid ?? null,
         startedAt: sprintProcess?.startedAt ?? null,
+        tmux: !!state.tmuxSessionName,
       })
     );
   } else if (req.url === "/api/launch" && req.method === "POST") {
@@ -398,6 +406,27 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
     broadcast({ type: "checkpoint", checkpoint: null });
     res.writeHead(200, { "Content-Type": "application/json", ...cors });
     res.end(JSON.stringify({ ok: true }));
+  } else if (req.url === "/api/resume" && req.method === "POST") {
+    if (state.teamName) {
+      res.writeHead(409, { "Content-Type": "application/json", ...cors });
+      res.end(JSON.stringify({ error: "Sprint already active" }));
+      return;
+    }
+    const saved = loadPersistedState();
+    if (!saved?.teamName) {
+      res.writeHead(200, { "Content-Type": "application/json", ...cors });
+      res.end(JSON.stringify({ resumed: false }));
+      return;
+    }
+    const { tmuxAvailable: _, tmuxSessionName: __, projectName: ___, ...resumable } = saved;
+    Object.assign(state, resumable);
+    broadcast({ type: "init", state });
+    console.log(`[sprint] Resumed via API: team=${state.teamName}, tasks=${state.tasks.length}`);
+
+    // Asynchronously reconnect to existing tmux session
+    reconnectTmuxSession();
+    res.writeHead(200, { "Content-Type": "application/json", ...cors });
+    res.end(JSON.stringify({ resumed: true, teamName: state.teamName }));
   } else {
     res.writeHead(404);
     res.end("Not found");
@@ -434,13 +463,13 @@ wss.on("connection", (ws) => {
 tmux.isTmuxAvailable().then((available) => {
   state.tmuxAvailable = available;
   console.log(`[tmux] ${available ? "available" : "not available"}`);
+  // Notify already-connected clients
+  broadcast({ type: "init", state });
 });
 
-// --- Team discovered hook: attribute panes + start polling ---
-setTeamDiscoveredHook((agents) => {
-  if (!state.tmuxSessionName) return;
-  const session = state.tmuxSessionName;
+// --- Tmux pane discovery + polling bootstrap ---
 
+function discoverAndPollPanes(session: string, agents: string[]) {
   tmux.attributePanes(session, agents);
   console.log(`[tmux] Attributed ${agents.length} agents to panes`);
 
@@ -466,9 +495,46 @@ setTeamDiscoveredHook((agents) => {
       console.log(`[tmux] Pane polling started (${panes.length} panes)`);
     }
   }, 2000);
+}
+
+setTeamDiscoveredHook((agents) => {
+  if (!state.tmuxSessionName) return;
+  discoverAndPollPanes(state.tmuxSessionName, agents);
 });
 
+/** Try to find and reconnect to an existing tc-* tmux session */
+async function reconnectTmuxSession() {
+  const session = await tmux.findSprintSession();
+  if (!session) return;
+  state.tmuxSessionName = session;
+  state.tmuxAvailable = true;
+  console.log(`[tmux] Reconnected to session: ${session}`);
+  broadcast({ type: "init", state });
+
+  if (state.agents.length) {
+    discoverAndPollPanes(session, state.agents.map((a) => a.name));
+  }
+  tmuxSessionCheckInterval = setInterval(async () => {
+    const alive = await tmux.hasSession(session);
+    if (!alive) {
+      console.log(`[sprint] tmux session ${session} ended`);
+      stopPanePolling();
+      state.tmuxSessionName = null;
+      broadcast({ type: "process_exited", code: 0 });
+    }
+  }, 5000);
+}
+
 state.projectName = detectProjectName();
+
+// Resume interrupted sprint from persisted state
+const persisted = loadPersistedState();
+if (persisted && persisted.teamName) {
+  const { tmuxAvailable: _, tmuxSessionName: __, projectName: ___, ...resumable } = persisted;
+  Object.assign(state, resumable);
+  console.log(`[sprint] Resumed sprint state: team=${state.teamName}, tasks=${state.tasks.length}`);
+  reconnectTmuxSession();
+}
 
 server.listen(port, () => {
   console.log(`[sprint] Project: ${state.projectName}`);
@@ -487,6 +553,7 @@ function cleanup() {
     stopPanePolling();
     tmux.reset();
   }
+  flushSave(state);
   process.exit(0);
 }
 

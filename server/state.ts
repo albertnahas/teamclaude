@@ -1,6 +1,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join, basename } from "node:path";
 import type { WebSocket } from "ws";
+import { scheduleSave } from "./persistence.js";
 
 // --- Types ---
 
@@ -125,6 +126,10 @@ export function broadcast(event: WsEvent) {
   const data = JSON.stringify(event);
   for (const ws of clients) {
     if (ws.readyState === ws.OPEN) ws.send(data);
+  }
+  // Persist on every state mutation (debounced)
+  if (event.type !== "terminal_output" && event.type !== "panes_discovered") {
+    scheduleSave(state);
   }
 }
 
