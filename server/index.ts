@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { WebSocketServer } from "ws";
 
-import { state, clients, broadcast, resetState } from "./state.js";
+import { state, clients, broadcast, resetState, detectProjectName } from "./state.js";
 import { startWatching } from "./watcher.js";
 import { compileSprintPrompt } from "./prompt.js";
 
@@ -212,7 +212,10 @@ wss.on("connection", (ws) => {
   ws.on("close", () => clients.delete(ws));
 });
 
+state.projectName = detectProjectName();
+
 server.listen(port, () => {
+  console.log(`[sprint] Project: ${state.projectName}`);
   console.log(`[sprint] Visualization: http://localhost:${port}`);
   startWatching(TEAMS_DIR, TASKS_DIR);
 });

@@ -320,6 +320,17 @@
     letter-spacing: -0.01em;
   }
 
+  .sprint-bar-project {
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-glow);
+    padding: 2px 10px;
+    border-radius: 4px;
+    border: 1px solid rgba(6, 182, 212, 0.25);
+  }
+
   .sprint-bar-team {
     font-family: var(--font-mono);
     font-size: 10px;
@@ -996,6 +1007,7 @@
 
   <div class="sprint-bar">
     <span class="sprint-bar-title">Sprint</span>
+    <span class="sprint-bar-project" id="project-name"></span>
     <span class="sprint-bar-team" id="team-name"></span>
     <span class="sprint-bar-mode" id="sprint-mode"></span>
     <span class="sprint-bar-sep"></span>
@@ -1046,7 +1058,7 @@
   let reconnectDelay = 500;
   let currentPhase = 'setup';
 
-  const state = { agents: [], tasks: [], messages: [], teamName: null, paused: false, escalation: null, mode: 'manual', cycle: 0, phase: 'idle' };
+  const state = { agents: [], tasks: [], messages: [], teamName: null, projectName: null, paused: false, escalation: null, mode: 'manual', cycle: 0, phase: 'idle' };
   const reviewTaskIds = new Set();
   let taskView = 'list'; // 'list' | 'board'
   const setupConfig = { engineers: 1, includePM: false, cycles: 1 };
@@ -1054,12 +1066,13 @@
   const $ = (id) => document.getElementById(id);
 
   // Sprint phase elements (lazy, resolved after phase switch)
-  let banner, tasksList, messagesList, teamNameEl, taskCountEl, msgCountEl, pauseBtn, escalationBar, escalationText, escalationDismiss, cycleIndicator, stopBtn, viewToggle, sprintModeEl;
+  let banner, tasksList, messagesList, projectNameEl, teamNameEl, taskCountEl, msgCountEl, pauseBtn, escalationBar, escalationText, escalationDismiss, cycleIndicator, stopBtn, viewToggle, sprintModeEl;
 
   function bindSprintElements() {
     banner = $('banner');
     tasksList = $('tasks-list');
     messagesList = $('messages-list');
+    projectNameEl = $('project-name');
     teamNameEl = $('team-name');
     taskCountEl = $('task-count');
     msgCountEl = $('msg-count');
@@ -1510,6 +1523,7 @@
 
   function renderAll() {
     if (!teamNameEl) return;
+    if (projectNameEl) projectNameEl.textContent = state.projectName || '';
     teamNameEl.textContent = state.teamName || '';
     if (sprintModeEl) sprintModeEl.textContent = state.mode === 'autonomous' ? 'Autonomous' : 'Manual';
     renderAgents();

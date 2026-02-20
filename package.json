@@ -13,6 +13,7 @@
     "agents",
     "commands",
     "skills",
+    ".claude-plugin",
     ".sprint.example.yml",
     "README.md",
     "LICENSE"

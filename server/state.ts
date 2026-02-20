@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
+import { join, basename } from "node:path";
 import type { WebSocket } from "ws";
 
 // --- Types ---
@@ -30,6 +31,7 @@ export interface Message {
 
 export interface SprintState {
   teamName: string | null;
+  projectName: string | null;
   agents: AgentInfo[];
   tasks: TaskInfo[];
   messages: Message[];
@@ -66,6 +68,7 @@ export type WsEvent =
 
 export const state: SprintState = {
   teamName: null,
+  projectName: null,
   agents: [],
   tasks: [],
   messages: [],
@@ -107,11 +110,44 @@ export function broadcast(event: WsEvent) {
   }
 }
 
+export function detectProjectName(cwd: string = process.cwd()): string {
+  const manifests: { file: string; key: string }[] = [
+    { file: "package.json", key: "name" },
+    { file: "Cargo.toml", key: "name" },
+    { file: "pyproject.toml", key: "name" },
+  ];
+  for (const { file, key } of manifests) {
+    const path = join(cwd, file);
+    if (!existsSync(path)) continue;
+    try {
+      const raw = readFileSync(path, "utf-8");
+      if (file.endsWith(".json")) {
+        return JSON.parse(raw)[key] || basename(cwd);
+      }
+      // TOML: simple regex for name = "value"
+      const m = raw.match(new RegExp(`^${key}\\s*=\\s*"([^"]+)"`, "m"));
+      if (m) return m[1];
+    } catch {}
+  }
+  // Fallback: go.mod first line
+  const goMod = join(cwd, "go.mod");
+  if (existsSync(goMod)) {
+    try {
+      const first = readFileSync(goMod, "utf-8").split("\n")[0];
+      const m = first.match(/^module\s+(\S+)/);
+      if (m) return m[1].split("/").pop()!;
+    } catch {}
+  }
+  return basename(cwd);
+}
+
 export function resetState() {
   state.teamName = null;
+  state.projectName = null;
   state.agents = [];
   state.tasks = [];
   state.messages = [];
+  state.mode = "manual";
   state.paused = false;
   state.escalation = null;
   state.cycle = 0;

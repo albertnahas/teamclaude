@@ -1,4 +1,5 @@
 import { basename, dirname } from "node:path";
+import { statSync } from "node:fs";
 import { watch } from "chokidar";
 import {
   state,
@@ -277,8 +278,23 @@ export function handleTaskFile(filePath: string) {
   }
 }
 
+const STALE_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 hours
+let watcherReady = false;
+
+function isStale(filePath: string): boolean {
+  try {
+    const mtime = statSync(filePath).mtimeMs;
+    return Date.now() - mtime > STALE_THRESHOLD_MS;
+  } catch {
+    return true;
+  }
+}
+
 function handleFile(filePath: string) {
   if (!filePath.endsWith(".json")) return;
+
+  // During initial scan, skip stale files from old sprint sessions
+  if (!watcherReady && isStale(filePath)) return;
 
   if (filePath.includes("/teams/") && basename(filePath) === "config.json") {
     handleTeamConfig(filePath);
@@ -290,6 +306,7 @@ function handleFile(filePath: string) {
 }
 
 export function startWatching(teamsDir: string, tasksDir: string) {
+  watcherReady = false;
   const watcher = watch([teamsDir, tasksDir], {
     ignoreInitial: false,
     awaitWriteFinish: { stabilityThreshold: 200 },
@@ -299,6 +316,7 @@ export function startWatching(teamsDir: string, tasksDir: string) {
   watcher.on("add", handleFile).on("change", handleFile);
 
   watcher.on("ready", () => {
+    watcherReady = true;
     console.log(`[sprint] Watching ${teamsDir} and ${tasksDir}`);
   });
 
