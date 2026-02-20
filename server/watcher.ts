@@ -68,10 +68,29 @@ export function handleTeamConfig(filePath: string) {
   }
 }
 
+// Pricing: claude-sonnet-4-6 rates (per million tokens)
+const INPUT_COST_PER_MTOK = 3;
+const OUTPUT_COST_PER_MTOK = 15;
+
+function accumulateTokenUsage(
+  agentName: string,
+  inputTokens: number,
+  outputTokens: number
+) {
+  const tokens = inputTokens + outputTokens;
+  state.tokenUsage.total += tokens;
+  state.tokenUsage.byAgent[agentName] =
+    (state.tokenUsage.byAgent[agentName] || 0) + tokens;
+  state.tokenUsage.estimatedCostUsd +=
+    (inputTokens * INPUT_COST_PER_MTOK + outputTokens * OUTPUT_COST_PER_MTOK) /
+    1_000_000;
+  broadcast({ type: "token_usage", usage: state.tokenUsage });
+}
+
 export function handleInboxMessage(filePath: string) {
   if (!state.teamName || !filePath.includes(state.teamName)) return;
 
-  const raw = safeReadJSON(filePath) as any;
+  const raw = safeReadJSON(filePath) as Record<string, unknown> | Record<string, unknown>[] | null;
   if (!raw) return;
 
   const messages = Array.isArray(raw) ? raw : [raw];
@@ -80,16 +99,27 @@ export function handleInboxMessage(filePath: string) {
   const cursor = inboxCursors.get(cursorKey) || 0;
 
   for (let i = cursor; i < messages.length; i++) {
-    const msg = messages[i];
-    const from = msg?.from || "unknown";
+    const msg = messages[i] as Record<string, unknown>;
+    const from = typeof msg?.from === "string" ? msg.from : "unknown";
     const to = recipientName;
+
+    // Accumulate token usage if present (Claude API response format)
+    const usage = msg?.usage as Record<string, unknown> | undefined;
+    if (
+      usage &&
+      typeof usage.input_tokens === "number" &&
+      typeof usage.output_tokens === "number"
+    ) {
+      accumulateTokenUsage(to, usage.input_tokens, usage.output_tokens);
+    }
+
     const content = extractContent(
-      msg?.text || msg?.content || JSON.stringify(msg)
+      (msg?.text as string) || (msg?.content as string) || JSON.stringify(msg)
     );
 
     if (content.startsWith("[idle:")) continue;
 
-    const ts = msg?.timestamp ? new Date(msg.timestamp).getTime() : Date.now();
+    const ts = msg?.timestamp ? new Date(msg.timestamp as string | number).getTime() : Date.now();
 
     const message: Message = {
       id: `${ts}-${i}`,
@@ -114,6 +144,13 @@ export function handleInboxMessage(filePath: string) {
           case "TASK_ASSIGNED":
             inferredStatus = "in_progress";
             inferredOwner = message.to;
+            if (state.checkpoints.includes(tid)) {
+              state.checkpoints = state.checkpoints.filter((id) => id !== tid);
+              const taskSubject =
+                state.tasks.find((t) => t.id === tid)?.subject ?? `Task #${tid}`;
+              state.pendingCheckpoint = { taskId: tid, taskSubject };
+              broadcast({ type: "checkpoint", checkpoint: state.pendingCheckpoint });
+            }
             break;
           case "READY_FOR_REVIEW":
             inferredStatus = "in_progress";

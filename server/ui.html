@@ -555,6 +555,7 @@
     grid-template-columns: repeat(4, 1fr);
     gap: 6px;
     overflow: hidden;
+    position: relative;
   }
 
   .kanban-col {
@@ -626,6 +627,58 @@
     display: none;
   }
   .kanban-card.expanded .card-desc { display: block; }
+
+  /* Dependency badges */
+  .card-deps {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-muted);
+    margin-top: 5px;
+    line-height: 1.4;
+  }
+  .card-deps span { color: var(--red); }
+
+  /* Dependency highlight on hover */
+  .kanban-card.dep-highlight {
+    border-color: var(--amber) !important;
+    background: var(--bg-elevated) !important;
+    box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.3);
+  }
+  .kanban-card.dep-self {
+    border-color: var(--accent) !important;
+    background: var(--bg-elevated) !important;
+    box-shadow: 0 0 0 1px var(--accent-glow);
+  }
+
+  /* Dependency arrows SVG overlay */
+  #dep-arrows {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 5;
+    overflow: visible;
+  }
+  #dep-arrows.hidden { display: none; }
+
+  /* Show deps toggle button */
+  .dep-toggle {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .dep-toggle:hover { border-color: var(--text-muted); color: var(--text-primary); }
+  .dep-toggle.active {
+    border-color: var(--amber);
+    color: var(--amber);
+    background: rgba(245, 158, 11, 0.08);
+  }
 
   /* Messages */
   .messages-panel { grid-row: 3; grid-column: 1 / -1; display: flex; flex-direction: column; }
@@ -944,6 +997,330 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+  /* Checkpoint button on task rows/cards */
+  .checkpoint-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .checkpoint-btn:hover { border-color: var(--amber); color: var(--amber); }
+  .checkpoint-btn.armed { border-color: var(--amber); color: var(--amber); background: rgba(245, 158, 11, 0.08); }
+
+  /* Checkpoint Modal */
+  .checkpoint-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(6, 10, 19, 0.75);
+    backdrop-filter: blur(4px);
+    z-index: 300;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.2s ease-out;
+  }
+  .checkpoint-overlay.hidden { display: none; }
+
+  .checkpoint-modal {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 32px;
+    max-width: 420px;
+    width: 90%;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .checkpoint-modal-title {
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .checkpoint-modal-task {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--amber);
+    padding: 8px 12px;
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.2);
+    border-radius: 6px;
+  }
+
+  .checkpoint-modal-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+
+  .checkpoint-modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+  }
+
+  .checkpoint-approve-btn {
+    padding: 8px 20px;
+    border-radius: 6px;
+    border: none;
+    background: var(--accent);
+    color: var(--bg-deep);
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .checkpoint-approve-btn:hover { background: var(--accent-hover); }
+
+  .checkpoint-skip-btn {
+    padding: 8px 20px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: none;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .checkpoint-skip-btn:hover { border-color: var(--text-muted); color: var(--text-primary); }
+
+  /* ═══════════════════════════════════════
+     SPRINT TAB BAR
+     ═══════════════════════════════════════ */
+
+  .sprint-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 0 12px;
+    background: var(--bg-base);
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+  }
+
+  .sprint-tab {
+    padding: 6px 14px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    margin-bottom: -1px;
+  }
+  .sprint-tab:hover { color: var(--text-secondary); }
+  .sprint-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ═══════════════════════════════════════
+     SPRINT HISTORY PANEL
+     ═══════════════════════════════════════ */
+
+  .history-panel {
+    flex: 1;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+    background: var(--bg-base);
+  }
+  .history-panel.visible { display: flex; }
+
+  .history-table-wrap {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 16px;
+  }
+
+  .history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  .history-table th {
+    font-family: var(--font-display);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border-subtle);
+    white-space: nowrap;
+  }
+
+  .history-table td {
+    padding: 10px 10px;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    vertical-align: middle;
+  }
+
+  .history-table tbody tr.history-data-row {
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .history-table tbody tr.history-data-row:hover { background: var(--bg-surface); }
+  .history-table tbody tr.history-data-row.expanded { background: var(--bg-surface); }
+
+  .history-detail-row td {
+    padding: 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .history-detail-inner {
+    padding: 10px 14px 14px 14px;
+    background: var(--bg-elevated);
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .history-agents {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .history-agent-tag {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--green);
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  .history-detail-label {
+    font-family: var(--font-display);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+  }
+
+  .history-sprint-id {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent);
+  }
+
+  .history-tasks-bar {
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .history-tasks-bar .done { color: var(--green); }
+  .history-tasks-bar .sep { color: var(--text-muted); }
+  .history-tasks-bar .total { color: var(--text-muted); }
+
+  /* Token Cost Panel */
+  .token-panel {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin: 8px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .token-panel-header {
+    font-family: var(--font-display);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .token-totals {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .token-cost {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: -0.02em;
+  }
+
+  .token-count {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .token-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .token-bar-row {
+    display: grid;
+    grid-template-columns: 60px 1fr 44px;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .token-bar-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .token-bar-track {
+    height: 4px;
+    background: var(--bg-elevated);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .token-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.4s ease-out;
+    min-width: 2px;
+  }
+
+  .token-bar-val {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-muted);
+    text-align: right;
+    white-space: nowrap;
+  }
 </style>
 </head>
 <body>
@@ -1005,6 +1382,18 @@
     <button class="escalation-dismiss" id="escalation-dismiss">Dismiss</button>
   </div>
 
+  <div class="checkpoint-overlay hidden" id="checkpoint-overlay">
+    <div class="checkpoint-modal">
+      <div class="checkpoint-modal-title">Checkpoint Reached</div>
+      <div class="checkpoint-modal-task" id="checkpoint-modal-task"></div>
+      <div class="checkpoint-modal-desc">Task assignment detected. Review the task before the engineer proceeds.</div>
+      <div class="checkpoint-modal-actions">
+        <button class="checkpoint-skip-btn" id="checkpoint-skip-btn">Skip</button>
+        <button class="checkpoint-approve-btn" id="checkpoint-approve-btn">Continue</button>
+      </div>
+    </div>
+  </div>
+
   <div class="sprint-bar">
     <span class="sprint-bar-title">Sprint</span>
     <span class="sprint-bar-project" id="project-name"></span>
@@ -1017,12 +1406,27 @@
     <button class="stop-btn" id="stop-btn">Stop</button>
   </div>
 
+  <div class="sprint-tabs">
+    <button class="sprint-tab active" id="tab-sprint" data-tab="sprint">Sprint</button>
+    <button class="sprint-tab" id="tab-history" data-tab="history">History</button>
+  </div>
+
   <div class="container" id="sprint-container">
     <div class="panel agents-panel">
       <div class="panel-header">
         <span>Agents <span class="info-tip">i<span class="tip-text">Live topology of the agent team. Green pulse = active, gray = idle. Animated dots on connection lines show real-time message flow between agents.</span></span></span>
       </div>
       <svg class="agents-svg" id="agents-svg" viewBox="0 0 280 400" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="token-panel" id="token-panel" style="display:none">
+        <div class="token-panel-header">
+          <span>Token Cost</span>
+        </div>
+        <div class="token-totals">
+          <span class="token-cost" id="token-cost">$0.0000</span>
+          <span class="token-count" id="token-total">0 tok</span>
+        </div>
+        <div class="token-bars" id="token-bars"></div>
+      </div>
     </div>
 
     <div class="resize-h" id="resize-h"></div>
@@ -1031,6 +1435,7 @@
       <div class="panel-header">
         <span>Tasks <span class="info-tip">i<span class="tip-text">All sprint tasks tracked in real-time. Click a task to expand its description. Toggle between list and kanban board views. Status: pending, in progress, in review, or completed.</span></span></span>
         <span id="task-count"></span>
+        <button class="dep-toggle" id="dep-toggle" style="display:none">Show Deps</button>
         <button class="view-toggle" id="view-toggle">Board</button>
       </div>
       <div class="tasks-list" id="tasks-list">
@@ -1050,6 +1455,12 @@
       </div>
     </div>
   </div>
+
+  <div class="history-panel" id="history-panel">
+    <div class="history-table-wrap" id="history-table-wrap">
+      <div class="empty-state" id="history-empty">No sprint history yet</div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -1058,15 +1469,16 @@
   let reconnectDelay = 500;
   let currentPhase = 'setup';
 
-  const state = { agents: [], tasks: [], messages: [], teamName: null, projectName: null, paused: false, escalation: null, mode: 'manual', cycle: 0, phase: 'idle' };
+  const state = { agents: [], tasks: [], messages: [], teamName: null, projectName: null, paused: false, escalation: null, mode: 'manual', cycle: 0, phase: 'idle', tokenUsage: { total: 0, byAgent: {}, estimatedCostUsd: 0 }, checkpoints: [], pendingCheckpoint: null };
   const reviewTaskIds = new Set();
   let taskView = 'list'; // 'list' | 'board'
+  let depArrowsVisible = false;
   const setupConfig = { engineers: 1, includePM: false, cycles: 1 };
 
   const $ = (id) => document.getElementById(id);
 
   // Sprint phase elements (lazy, resolved after phase switch)
-  let banner, tasksList, messagesList, projectNameEl, teamNameEl, taskCountEl, msgCountEl, pauseBtn, escalationBar, escalationText, escalationDismiss, cycleIndicator, stopBtn, viewToggle, sprintModeEl;
+  let banner, tasksList, messagesList, projectNameEl, teamNameEl, taskCountEl, msgCountEl, pauseBtn, escalationBar, escalationText, escalationDismiss, cycleIndicator, stopBtn, viewToggle, sprintModeEl, depToggle, checkpointOverlay, checkpointModalTask;
 
   function bindSprintElements() {
     banner = $('banner');
@@ -1084,6 +1496,22 @@
     stopBtn = $('stop-btn');
     viewToggle = $('view-toggle');
     sprintModeEl = $('sprint-mode');
+    depToggle = $('dep-toggle');
+    checkpointOverlay = $('checkpoint-overlay');
+    checkpointModalTask = $('checkpoint-modal-task');
+
+    $('checkpoint-approve-btn').addEventListener('click', () => {
+      fetch('/api/checkpoint/release', { method: 'POST' });
+    });
+    $('checkpoint-skip-btn').addEventListener('click', async () => {
+      await fetch('/api/checkpoint/release', { method: 'POST' });
+      const cp = state.pendingCheckpoint;
+      if (cp) {
+        const sysMsg = { id: 'cp-skip-' + Date.now(), timestamp: Date.now(), from: 'system', to: 'all', content: 'Checkpoint skipped for Task #' + cp.taskId + ' — ' + cp.taskSubject };
+        state.messages.push(sysMsg);
+        renderNewMessage(sysMsg);
+      }
+    });
 
     pauseBtn.addEventListener('click', () => { fetch('/api/pause', { method: 'POST' }); });
     escalationDismiss.addEventListener('click', () => { fetch('/api/dismiss-escalation', { method: 'POST' }); });
@@ -1096,10 +1524,19 @@
     viewToggle.addEventListener('click', () => {
       taskView = taskView === 'list' ? 'board' : 'list';
       viewToggle.textContent = taskView === 'list' ? 'Board' : 'List';
+      depToggle.style.display = taskView === 'board' ? '' : 'none';
       renderTasks();
+    });
+    depToggle.addEventListener('click', () => {
+      depArrowsVisible = !depArrowsVisible;
+      depToggle.classList.toggle('active', depArrowsVisible);
+      depToggle.textContent = depArrowsVisible ? 'Hide Deps' : 'Show Deps';
+      const svg = $('dep-arrows');
+      if (svg) svg.classList.toggle('hidden', !depArrowsVisible);
     });
 
     initResizeHandles();
+    initSprintTabs();
   }
 
   function initResizeHandles() {
@@ -1499,6 +1936,14 @@
           renderTasks();
         }
         break;
+      case 'token_usage':
+        state.tokenUsage = event.usage;
+        if (currentPhase === 'sprint') renderTokenUsage();
+        break;
+      case 'checkpoint':
+        state.pendingCheckpoint = event.checkpoint;
+        if (currentPhase === 'sprint') renderCheckpoint();
+        break;
       case 'process_started':
         switchPhase('sprint');
         break;
@@ -1532,7 +1977,9 @@
     renderAgentStatus();
     renderPauseState();
     renderEscalation();
+    renderCheckpoint();
     renderCycleIndicator();
+    renderTokenUsage();
   }
 
   function renderPauseState() {
@@ -1554,6 +2001,16 @@
     }
   }
 
+  function renderCheckpoint() {
+    if (!checkpointOverlay) return;
+    if (state.pendingCheckpoint) {
+      checkpointModalTask.textContent = '#' + state.pendingCheckpoint.taskId + ' — ' + state.pendingCheckpoint.taskSubject;
+      checkpointOverlay.classList.remove('hidden');
+    } else {
+      checkpointOverlay.classList.add('hidden');
+    }
+  }
+
   function renderCycleIndicator() {
     if (!cycleIndicator) return;
     cycleIndicator.textContent = '';
@@ -1572,8 +2029,16 @@
     const completed = state.tasks.filter(t => t.status === 'completed').length;
     taskCountEl.textContent = total ? completed + '/' + total : '';
 
+    // Disconnect previous ResizeObserver before clearing the DOM
+    if (tasksList._depObserver) {
+      tasksList._depObserver.disconnect();
+      tasksList._depObserver = null;
+    }
+
     tasksList.textContent = '';
     tasksList.classList.toggle('board', taskView === 'board');
+
+    if (taskView !== 'board' && depToggle) depToggle.style.display = 'none';
 
     if (!total) {
       renderTasksEmpty();
@@ -1624,6 +2089,22 @@
       row.appendChild(el('span', 'task-subject', t.subject));
       row.appendChild(el('span', 'task-owner', displayName(t.owner)));
 
+      if (t.status === 'pending') {
+        const armed = state.checkpoints.includes(t.id);
+        const btn = el('button', 'checkpoint-btn' + (armed ? ' armed' : ''), armed ? 'Gated' : 'Gate');
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (state.checkpoints.includes(t.id)) {
+            state.checkpoints = state.checkpoints.filter(id => id !== t.id);
+          } else {
+            state.checkpoints.push(t.id);
+            fetch('/api/checkpoint', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: t.id }) });
+          }
+          renderTasks();
+        });
+        row.appendChild(btn);
+      }
+
       if (t.description) {
         const desc = el('div', 'task-desc', t.description);
         row.appendChild(desc);
@@ -1650,6 +2131,13 @@
       else columns[0].tasks.push(t);
     }
 
+    // Build a set of task ids that have dependents (are blockers)
+    const blockerIds = new Set(state.tasks.flatMap(t => t.blockedBy || []));
+    const hasDeps = state.tasks.some(t => (t.blockedBy && t.blockedBy.length > 0) || blockerIds.has(t.id));
+
+    // Show/hide the dep toggle based on whether there are any dependencies
+    if (depToggle) depToggle.style.display = hasDeps ? '' : 'none';
+
     for (const col of columns) {
       const colDiv = el('div', 'kanban-col');
 
@@ -1665,21 +2153,52 @@
 
       for (const t of col.tasks) {
         const card = el('div', 'kanban-card col-' + col.key);
+        card.dataset.taskId = t.id;
         const blocked = t.blockedBy && t.blockedBy.length > 0;
         if (blocked) card.classList.add('blocked');
 
         const top = el('div', 'card-top');
         top.appendChild(el('span', 'card-id', '#' + t.id));
         if (blocked) top.appendChild(el('span', 'card-blocked', 'BLOCKED'));
+        if (col.key === 'todo') {
+          const armed = state.checkpoints.includes(t.id);
+          const btn = el('button', 'checkpoint-btn' + (armed ? ' armed' : ''), armed ? 'Gated' : 'Gate');
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (state.checkpoints.includes(t.id)) {
+              state.checkpoints = state.checkpoints.filter(id => id !== t.id);
+            } else {
+              state.checkpoints.push(t.id);
+              fetch('/api/checkpoint', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: t.id }) });
+            }
+            renderTasks();
+          });
+          top.appendChild(btn);
+        }
         card.appendChild(top);
 
         card.appendChild(el('div', 'card-subject', t.subject));
         if (t.owner) card.appendChild(el('div', 'card-owner', displayName(t.owner)));
 
+        // Dependency badge
+        if (blocked) {
+          const depsEl = el('div', 'card-deps');
+          depsEl.appendChild(document.createTextNode('Blocked by: '));
+          t.blockedBy.forEach((bid, i) => {
+            if (i > 0) depsEl.appendChild(document.createTextNode(', '));
+            depsEl.appendChild(el('span', null, '#' + bid));
+          });
+          card.appendChild(depsEl);
+        }
+
         if (t.description) {
           card.appendChild(el('div', 'card-desc', t.description));
           card.addEventListener('click', () => card.classList.toggle('expanded'));
         }
+
+        // Hover: highlight transitive dependency chain
+        card.addEventListener('mouseenter', () => highlightDepChain(t.id));
+        card.addEventListener('mouseleave', clearDepHighlight);
 
         body.appendChild(card);
       }
@@ -1687,6 +2206,114 @@
       colDiv.appendChild(body);
       tasksList.appendChild(colDiv);
     }
+
+    // Add SVG arrow overlay as last child of the board (on top of columns)
+    drawDepArrows();
+
+    // Recalculate arrows on resize
+    if (!tasksList._depObserver) {
+      tasksList._depObserver = new ResizeObserver(() => drawDepArrows());
+      tasksList._depObserver.observe(tasksList);
+    }
+  }
+
+  // Build transitive closure of blockedBy for a given task id
+  function getTransitiveDeps(taskId) {
+    const visited = new Set();
+    const queue = [taskId];
+    while (queue.length) {
+      const id = queue.pop();
+      if (visited.has(id)) continue;
+      visited.add(id);
+      const t = state.tasks.find(x => x.id === id);
+      if (t && t.blockedBy) t.blockedBy.forEach(b => queue.push(b));
+    }
+    visited.delete(taskId); // exclude self
+    return visited;
+  }
+
+  function highlightDepChain(taskId) {
+    const depIds = getTransitiveDeps(taskId);
+    for (const card of tasksList.querySelectorAll('.kanban-card')) {
+      const cid = card.dataset.taskId;
+      if (cid === taskId) {
+        card.classList.add('dep-self');
+      } else if (depIds.has(cid)) {
+        card.classList.add('dep-highlight');
+      }
+    }
+  }
+
+  function clearDepHighlight() {
+    for (const card of tasksList.querySelectorAll('.kanban-card')) {
+      card.classList.remove('dep-self', 'dep-highlight');
+    }
+  }
+
+  function drawDepArrows() {
+    // Remove old SVG overlay
+    const old = $('dep-arrows');
+    if (old) old.remove();
+
+    // Only draw if there are dependencies
+    const pairs = [];
+    for (const t of state.tasks) {
+      if (!t.blockedBy || !t.blockedBy.length) continue;
+      for (const bid of t.blockedBy) {
+        pairs.push({ from: bid, to: t.id }); // arrow: blocker → blocked
+      }
+    }
+    if (!pairs.length) return;
+
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.id = 'dep-arrows';
+    svg.classList.toggle('hidden', !depArrowsVisible);
+    tasksList.appendChild(svg);
+
+    const boardRect = tasksList.getBoundingClientRect();
+
+    for (const { from, to } of pairs) {
+      const fromCard = tasksList.querySelector(`[data-task-id="${from}"]`);
+      const toCard = tasksList.querySelector(`[data-task-id="${to}"]`);
+      if (!fromCard || !toCard) continue;
+
+      const fr = fromCard.getBoundingClientRect();
+      const tr = toCard.getBoundingClientRect();
+
+      // Coordinates relative to the board
+      const x1 = fr.left + fr.width / 2 - boardRect.left;
+      const y1 = fr.bottom - boardRect.top;
+      const x2 = tr.left + tr.width / 2 - boardRect.left;
+      const y2 = tr.top - boardRect.top;
+
+      const cp1y = y1 + (y2 - y1) * 0.4;
+      const cp2y = y1 + (y2 - y1) * 0.6;
+
+      const path = document.createElementNS(SVG_NS, 'path');
+      path.setAttribute('d', `M ${x1} ${y1} C ${x1} ${cp1y}, ${x2} ${cp2y}, ${x2} ${y2}`);
+      path.setAttribute('stroke', 'rgba(245,158,11,0.5)');
+      path.setAttribute('stroke-width', '1.5');
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke-dasharray', '4 3');
+      path.setAttribute('marker-end', 'url(#dep-arrow-head)');
+      svg.appendChild(path);
+    }
+
+    // Arrowhead marker (define once inside the SVG)
+    const defs = document.createElementNS(SVG_NS, 'defs');
+    const marker = document.createElementNS(SVG_NS, 'marker');
+    marker.setAttribute('id', 'dep-arrow-head');
+    marker.setAttribute('markerWidth', '7');
+    marker.setAttribute('markerHeight', '7');
+    marker.setAttribute('refX', '3.5');
+    marker.setAttribute('refY', '3.5');
+    marker.setAttribute('orient', 'auto');
+    const arrowPath = document.createElementNS(SVG_NS, 'path');
+    arrowPath.setAttribute('d', 'M 0 0 L 7 3.5 L 0 7 Z');
+    arrowPath.setAttribute('fill', 'rgba(245,158,11,0.6)');
+    marker.appendChild(arrowPath);
+    defs.appendChild(marker);
+    svg.insertBefore(defs, svg.firstChild);
   }
 
   function renderMessages() {
@@ -1812,11 +2439,155 @@
     }
   }
 
+  function fmtTokens(n) {
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+    if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+    return String(n);
+  }
+
+  function renderTokenUsage() {
+    const panel = $('token-panel');
+    if (!panel) return;
+    const usage = state.tokenUsage;
+    if (!usage || usage.total === 0) { panel.style.display = 'none'; return; }
+
+    panel.style.display = '';
+    $('token-cost').textContent = '$' + usage.estimatedCostUsd.toFixed(4);
+    $('token-total').textContent = fmtTokens(usage.total) + ' tok';
+
+    const barsEl = $('token-bars');
+    barsEl.textContent = '';
+
+    const entries = Object.entries(usage.byAgent).sort((a, b) => b[1] - a[1]);
+    const max = entries[0]?.[1] || 1;
+
+    for (const [agent, tokens] of entries) {
+      const pct = Math.max(2, Math.round((tokens / max) * 100));
+      const row = el('div', 'token-bar-row');
+
+      const label = el('span', 'token-bar-label');
+      label.title = agent;
+      label.textContent = displayName(agent);
+      row.appendChild(label);
+
+      const track = el('div', 'token-bar-track');
+      const fill = el('div', 'token-bar-fill');
+      fill.style.width = pct + '%';
+      track.appendChild(fill);
+      row.appendChild(track);
+
+      row.appendChild(el('span', 'token-bar-val', fmtTokens(tokens)));
+      barsEl.appendChild(row);
+    }
+  }
+
   function showBanner(text, type, autoHide) {
     if (!banner) return;
     banner.textContent = text;
     banner.className = 'banner ' + type;
     if (autoHide) setTimeout(() => banner.classList.add('hidden'), autoHide);
+  }
+
+  // --- Sprint History ---
+
+  let historyLoaded = false;
+
+  function initSprintTabs() {
+    const tabs = document.querySelectorAll('.sprint-tab');
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const target = tab.dataset.tab;
+        $('sprint-container').style.display = target === 'sprint' ? '' : 'none';
+        const historyPanel = $('history-panel');
+        historyPanel.classList.toggle('visible', target === 'history');
+        if (target === 'history' && !historyLoaded) loadSprintHistory();
+      });
+    });
+  }
+
+  async function loadSprintHistory() {
+    historyLoaded = true;
+    const wrap = $('history-table-wrap');
+    try {
+      const res = await fetch('/api/analytics');
+      const records = await res.json();
+      renderHistoryTable(wrap, records);
+    } catch {
+      wrap.textContent = '';
+      wrap.appendChild(el('div', 'empty-state', 'Failed to load sprint history'));
+    }
+  }
+
+  function renderHistoryTable(wrap, records) {
+    wrap.textContent = '';
+    if (!records.length) {
+      wrap.appendChild(el('div', 'empty-state', 'No sprint history yet'));
+      return;
+    }
+
+    const table = el('table', 'history-table');
+    const thead = el('thead');
+    const hdrRow = el('tr');
+    ['Sprint ID', 'Date', 'Cycle', 'Tasks', 'Avg Review Rounds', 'Messages'].forEach(h => {
+      hdrRow.appendChild(el('th', null, h));
+    });
+    thead.appendChild(hdrRow);
+    table.appendChild(thead);
+
+    const tbody = el('tbody');
+
+    records.slice().reverse().forEach(r => {
+      const dataRow = el('tr', 'history-data-row');
+      const detailRow = el('tr', 'history-detail-row');
+      detailRow.style.display = 'none';
+
+      const date = new Date(r.completedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+      const idTd = el('td');
+      idTd.appendChild(el('span', 'history-sprint-id', r.sprintId));
+      dataRow.appendChild(idTd);
+      dataRow.appendChild(el('td', null, date));
+      dataRow.appendChild(el('td', null, String(r.cycle)));
+
+      const tasksTd = el('td');
+      const tasksBar = el('span', 'history-tasks-bar');
+      const doneSpan = el('span', 'done', String(r.completedTasks));
+      const sepSpan = el('span', 'sep', '/');
+      const totalSpan = el('span', 'total', String(r.totalTasks));
+      tasksBar.appendChild(doneSpan);
+      tasksBar.appendChild(sepSpan);
+      tasksBar.appendChild(totalSpan);
+      tasksTd.appendChild(tasksBar);
+      dataRow.appendChild(tasksTd);
+
+      dataRow.appendChild(el('td', null, String(r.avgReviewRoundsPerTask)));
+      dataRow.appendChild(el('td', null, String(r.totalMessages)));
+
+      dataRow.addEventListener('click', () => {
+        const open = dataRow.classList.toggle('expanded');
+        detailRow.style.display = open ? '' : 'none';
+      });
+
+      // Detail row: agent list
+      const detailTd = el('td');
+      detailTd.colSpan = 6;
+      const inner = el('div', 'history-detail-inner');
+      inner.appendChild(el('div', 'history-detail-label', 'Agents'));
+      const agentList = el('div', 'history-agents');
+      (r.agents || []).forEach(a => agentList.appendChild(el('span', 'history-agent-tag', a)));
+      if (!r.agents || !r.agents.length) agentList.appendChild(el('span', null, '\u2014'));
+      inner.appendChild(agentList);
+      detailTd.appendChild(inner);
+      detailRow.appendChild(detailTd);
+
+      tbody.appendChild(dataRow);
+      tbody.appendChild(detailRow);
+    });
+
+    table.appendChild(tbody);
+    wrap.appendChild(table);
   }
 
   // --- Init ---

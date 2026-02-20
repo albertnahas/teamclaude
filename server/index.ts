@@ -13,6 +13,9 @@ import { WebSocketServer } from "ws";
 import { state, clients, broadcast, resetState, detectProjectName } from "./state.js";
 import { startWatching } from "./watcher.js";
 import { compileSprintPrompt } from "./prompt.js";
+import { recordSprintCompletion, loadSprintHistory } from "./analytics.js";
+import { createSprintBranch, generatePRSummary, getCurrentBranch } from "./git.js";
+import { generateRetro } from "./retro.js";
 
 // --- CLI flags ---
 
@@ -44,6 +47,9 @@ let sprintProcess: {
   startedAt: number;
   config: { roadmap: string; engineers: number; includePM: boolean };
 } | null = null;
+
+let sprintBranch: string | null = null;
+let lastRetro: string | null = null;
 
 // --- HTTP handlers ---
 
@@ -128,13 +134,19 @@ function handleLaunch(
         broadcast({ type: "process_exited", code });
       });
 
+      const { pid, startedAt } = sprintProcess;
+
+      createSprintBranch(
+        state.teamName ?? "sprint",
+        state.cycle,
+        process.cwd()
+      ).then((branch) => {
+        sprintBranch = branch;
+        if (branch) console.log(`[git] Sprint branch: ${branch}`);
+      });
+
       res.writeHead(200, { "Content-Type": "application/json", ...cors });
-      res.end(
-        JSON.stringify({
-          pid: child.pid,
-          startedAt: sprintProcess.startedAt,
-        })
-      );
+      res.end(JSON.stringify({ pid, startedAt }));
     } catch (err: any) {
       res.writeHead(400, { "Content-Type": "application/json", ...cors });
       res.end(JSON.stringify({ error: err.message }));
@@ -172,14 +184,52 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
   } else if (req.url === "/api/launch" && req.method === "POST") {
     handleLaunch(req, res, cors);
   } else if (req.url === "/api/stop" && req.method === "POST") {
+    const wasRunning = !!sprintProcess;
     if (sprintProcess) {
       sprintProcess.process.kill("SIGTERM");
+      const startedAt = sprintProcess.startedAt;
       sprintProcess = null;
+      if (wasRunning) recordSprintCompletion(state, startedAt);
     }
+    const stateCopy = { ...state, tasks: [...state.tasks], messages: [...state.messages], agents: [...state.agents] };
+    const history = loadSprintHistory();
+    lastRetro = generateRetro(stateCopy, history);
+    const branchAtStop = sprintBranch;
+    sprintBranch = null;
     resetState();
     broadcast({ type: "init", state });
+    generatePRSummary(stateCopy, process.cwd()).then((prSummary) => {
+      res.writeHead(200, { "Content-Type": "application/json", ...cors });
+      res.end(JSON.stringify({ ok: true, prSummary, retro: lastRetro, branch: branchAtStop }));
+    });
+  } else if (req.url === "/api/retro" && req.method === "GET") {
+    if (!lastRetro) {
+      res.writeHead(404, { "Content-Type": "text/plain", ...cors });
+      res.end("No retrospective available yet");
+    } else {
+      res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", ...cors });
+      res.end(lastRetro);
+    }
+  } else if (req.url === "/api/git-status" && req.method === "GET") {
+    getCurrentBranch(process.cwd()).then((branch) => {
+      res.writeHead(200, { "Content-Type": "application/json", ...cors });
+      res.end(JSON.stringify({ branch, hasBranch: !!sprintBranch }));
+    });
+  } else if (req.url?.startsWith("/api/analytics") && req.method === "GET") {
+    const url = new URL(req.url, "http://localhost");
+    let records = loadSprintHistory();
+    const cycleParam = url.searchParams.get("cycle");
+    if (cycleParam !== null) {
+      const cycle = parseInt(cycleParam, 10);
+      if (!isNaN(cycle)) records = records.filter((r) => r.cycle === cycle);
+    }
+    const limitParam = url.searchParams.get("limit");
+    if (limitParam !== null) {
+      const limit = parseInt(limitParam, 10);
+      if (!isNaN(limit) && limit > 0) records = records.slice(-limit);
+    }
     res.writeHead(200, { "Content-Type": "application/json", ...cors });
-    res.end(JSON.stringify({ ok: true }));
+    res.end(JSON.stringify(records));
   } else if (req.url === "/api/pause" && req.method === "POST") {
     state.paused = !state.paused;
     console.log(`[sprint] ${state.paused ? "Paused" : "Resumed"}`);
@@ -192,6 +242,27 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
   ) {
     state.escalation = null;
     broadcast({ type: "escalation", escalation: null });
+    res.writeHead(200, { "Content-Type": "application/json", ...cors });
+    res.end(JSON.stringify({ ok: true }));
+  } else if (req.url === "/api/checkpoint" && req.method === "POST") {
+    let body = "";
+    req.on("data", (chunk: Buffer) => (body += chunk));
+    req.on("end", () => {
+      try {
+        const { taskId } = JSON.parse(body) as { taskId: string };
+        if (taskId && !state.checkpoints.includes(taskId)) {
+          state.checkpoints.push(taskId);
+        }
+        res.writeHead(200, { "Content-Type": "application/json", ...cors });
+        res.end(JSON.stringify({ ok: true }));
+      } catch {
+        res.writeHead(400, { "Content-Type": "application/json", ...cors });
+        res.end(JSON.stringify({ error: "Invalid body" }));
+      }
+    });
+  } else if (req.url === "/api/checkpoint/release" && req.method === "POST") {
+    state.pendingCheckpoint = null;
+    broadcast({ type: "checkpoint", checkpoint: null });
     res.writeHead(200, { "Content-Type": "application/json", ...cors });
     res.end(JSON.stringify({ ok: true }));
   } else {

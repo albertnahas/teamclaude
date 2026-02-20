@@ -46,6 +46,13 @@ export interface SprintState {
   cycle: number;
   phase: "idle" | "analyzing" | "sprinting" | "validating";
   reviewTaskIds: string[];
+  tokenUsage: {
+    total: number;
+    byAgent: Record<string, number>;
+    estimatedCostUsd: number;
+  };
+  checkpoints: string[];
+  pendingCheckpoint: { taskId: string; taskSubject: string } | null;
 }
 
 export type WsEvent =
@@ -61,6 +68,8 @@ export type WsEvent =
       phase: SprintState["phase"];
       mode: SprintState["mode"];
     }
+  | { type: "token_usage"; usage: SprintState["tokenUsage"] }
+  | { type: "checkpoint"; checkpoint: SprintState["pendingCheckpoint"] }
   | { type: "process_started"; pid: number }
   | { type: "process_exited"; code: number | null };
 
@@ -78,6 +87,9 @@ export const state: SprintState = {
   cycle: 0,
   phase: "idle",
   reviewTaskIds: [],
+  tokenUsage: { total: 0, byAgent: {}, estimatedCostUsd: 0 },
+  checkpoints: [],
+  pendingCheckpoint: null,
 };
 
 export const inboxCursors = new Map<string, number>();
@@ -153,6 +165,9 @@ export function resetState() {
   state.cycle = 0;
   state.phase = "idle";
   state.reviewTaskIds = [];
+  state.tokenUsage = { total: 0, byAgent: {}, estimatedCostUsd: 0 };
+  state.checkpoints = [];
+  state.pendingCheckpoint = null;
   setTeamInitMessageSent(false);
   taskProtocolOverrides.clear();
   inboxCursors.clear();
