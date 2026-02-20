@@ -7,7 +7,8 @@ verification:
   # test: "pnpm test --run"
 
 agents:
-  # Default model for all sprint agents
+  # Default model for all sprint agents (haiku | sonnet | opus)
+  # Also determines token cost estimates in the dashboard
   model: sonnet
 
 sprint:

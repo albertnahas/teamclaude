@@ -32,6 +32,8 @@ function makeState(overrides: Partial<SprintState> = {}): SprintState {
     tokenUsage: { total: 0, byAgent: {}, estimatedCostUsd: 0 },
     checkpoints: [],
     pendingCheckpoint: null,
+    tmuxAvailable: false,
+    tmuxSessionName: null,
     ...overrides,
   };
 }

@@ -1,5 +1,5 @@
-import { basename, dirname } from "node:path";
-import { statSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
+import { statSync, readFileSync, existsSync } from "node:fs";
 import { watch } from "chokidar";
 import {
   state,
@@ -15,6 +15,9 @@ import type { Message, TaskInfo } from "./state.js";
 
 export function isSprintTeam(config: any): boolean {
   if (!config?.members) return false;
+  // Accept by team name prefix (persists after agent shutdown)
+  if (typeof config.name === "string" && config.name.startsWith("sprint-")) return true;
+  // Accept by member names (active sprint detection)
   const names: string[] = config.members.map((m: any) => m.name);
   return (
     names.includes("sprint-manager") &&
@@ -22,6 +25,11 @@ export function isSprintTeam(config: any): boolean {
       (n) => n === "sprint-engineer" || /^sprint-engineer-\d+$/.test(n)
     )
   );
+}
+
+let onTeamDiscovered: ((agents: string[]) => void) | null = null;
+export function setTeamDiscoveredHook(fn: (agents: string[]) => void) {
+  onTeamDiscovered = fn;
 }
 
 export function handleTeamConfig(filePath: string) {
@@ -50,6 +58,8 @@ export function handleTeamConfig(filePath: string) {
   );
   broadcast({ type: "init", state });
 
+  onTeamDiscovered?.(state.agents.map((a) => a.name));
+
   if (!teamInitMessageSent) {
     setTeamInitMessageSent(true);
     const sysContent =
@@ -68,9 +78,31 @@ export function handleTeamConfig(filePath: string) {
   }
 }
 
-// Pricing: claude-sonnet-4-6 rates (per million tokens)
-const INPUT_COST_PER_MTOK = 3;
-const OUTPUT_COST_PER_MTOK = 15;
+// Pricing per million tokens by model family
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  haiku:  { input: 0.80, output: 4 },
+  sonnet: { input: 3,    output: 15 },
+  opus:   { input: 15,   output: 75 },
+};
+
+function resolveModelPricing(): { input: number; output: number } {
+  const sprintYml = join(process.cwd(), ".sprint.yml");
+  if (existsSync(sprintYml)) {
+    try {
+      const raw = readFileSync(sprintYml, "utf-8");
+      const m = raw.match(/^agents:\s*\n(?:[ \t]+\S[^\n]*\n)*?[ \t]+model:\s*(\S+)/m);
+      if (m) {
+        const model = m[1].toLowerCase();
+        for (const key of Object.keys(MODEL_PRICING)) {
+          if (model.includes(key)) return MODEL_PRICING[key];
+        }
+      }
+    } catch {}
+  }
+  return MODEL_PRICING.sonnet;
+}
+
+const { input: INPUT_COST_PER_MTOK, output: OUTPUT_COST_PER_MTOK } = resolveModelPricing();
 
 function accumulateTokenUsage(
   agentName: string,
@@ -117,7 +149,20 @@ export function handleInboxMessage(filePath: string) {
       (msg?.text as string) || (msg?.content as string) || JSON.stringify(msg)
     );
 
-    if (content.startsWith("[idle:")) continue;
+    if (content.startsWith("[idle:")) {
+      const agent = state.agents.find((a) => a.name === recipientName);
+      if (agent) {
+        agent.status = "idle";
+        broadcast({ type: "agent_status", agent });
+      }
+      continue;
+    }
+
+    const agent = state.agents.find((a) => a.name === from);
+    if (agent && agent.status !== "active") {
+      agent.status = "active";
+      broadcast({ type: "agent_status", agent });
+    }
 
     const ts = msg?.timestamp ? new Date(msg.timestamp as string | number).getTime() : Date.now();
 

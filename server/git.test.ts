@@ -47,7 +47,7 @@ describe("getCurrentBranch", () => {
 
 describe("createSprintBranch", () => {
   it("returns the branch name on success", async () => {
-    // git checkout -b succeeds (stdout is empty on success, result is "")
+    // git checkout -b writes to stderr; exit code 0 = success regardless of stdout
     mockSuccess("");
     const result = await createSprintBranch("myteam", 2, CWD);
     expect(result).toBe("sprint/myteam-cycle2");
@@ -92,6 +92,8 @@ describe("generatePRSummary", () => {
     tokenUsage: { total: 0, byAgent: {}, estimatedCostUsd: 0 },
     checkpoints: [],
     pendingCheckpoint: null,
+    tmuxAvailable: false,
+    tmuxSessionName: null,
   };
 
   it("includes sprint name, cycle, task stats, and commits", async () => {

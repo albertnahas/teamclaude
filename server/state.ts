@@ -53,6 +53,8 @@ export interface SprintState {
   };
   checkpoints: string[];
   pendingCheckpoint: { taskId: string; taskSubject: string } | null;
+  tmuxAvailable: boolean;
+  tmuxSessionName: string | null;
 }
 
 export type WsEvent =
@@ -71,7 +73,9 @@ export type WsEvent =
   | { type: "token_usage"; usage: SprintState["tokenUsage"] }
   | { type: "checkpoint"; checkpoint: SprintState["pendingCheckpoint"] }
   | { type: "process_started"; pid: number }
-  | { type: "process_exited"; code: number | null };
+  | { type: "process_exited"; code: number | null }
+  | { type: "terminal_output"; agentName: string; paneIndex: number; content: string }
+  | { type: "panes_discovered"; panes: { agentName: string | null; paneIndex: number }[] };
 
 // --- State ---
 
@@ -90,6 +94,8 @@ export const state: SprintState = {
   tokenUsage: { total: 0, byAgent: {}, estimatedCostUsd: 0 },
   checkpoints: [],
   pendingCheckpoint: null,
+  tmuxAvailable: false,
+  tmuxSessionName: null,
 };
 
 export const inboxCursors = new Map<string, number>();
@@ -168,6 +174,7 @@ export function resetState() {
   state.tokenUsage = { total: 0, byAgent: {}, estimatedCostUsd: 0 };
   state.checkpoints = [];
   state.pendingCheckpoint = null;
+  state.tmuxSessionName = null;
   setTeamInitMessageSent(false);
   taskProtocolOverrides.clear();
   inboxCursors.clear();

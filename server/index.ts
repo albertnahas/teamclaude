@@ -4,24 +4,25 @@ import {
   type ServerResponse,
 } from "node:http";
 import { spawn, type ChildProcess } from "node:child_process";
-import { readFile } from "node:fs";
+import { readFile, readFileSync, existsSync } from "node:fs";
 import { join, dirname as pathDirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { WebSocketServer } from "ws";
 
 import { state, clients, broadcast, resetState, detectProjectName } from "./state.js";
-import { startWatching } from "./watcher.js";
+import { startWatching, setTeamDiscoveredHook } from "./watcher.js";
 import { compileSprintPrompt } from "./prompt.js";
 import { recordSprintCompletion, loadSprintHistory } from "./analytics.js";
 import { createSprintBranch, generatePRSummary, getCurrentBranch } from "./git.js";
 import { generateRetro } from "./retro.js";
+import * as tmux from "./tmux.js";
 
 // --- CLI flags ---
 
 function parseArgs(): { port: number } {
   const args = process.argv.slice(2);
-  let port = 3456;
+  let port: number | null = null;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--port" && args[i + 1]) {
@@ -30,7 +31,18 @@ function parseArgs(): { port: number } {
     }
   }
 
-  return { port };
+  if (port === null) {
+    const sprintYml = join(process.cwd(), ".sprint.yml");
+    if (existsSync(sprintYml)) {
+      try {
+        const raw = readFileSync(sprintYml, "utf-8");
+        const m = raw.match(/^server:\s*\n(?:[ \t]+\S[^\n]*\n)*?[ \t]+port:\s*(\d+)/m);
+        if (m) port = parseInt(m[1], 10);
+      } catch {}
+    }
+  }
+
+  return { port: port ?? 3456 };
 }
 
 // --- Paths ---
@@ -50,6 +62,8 @@ let sprintProcess: {
 
 let sprintBranch: string | null = null;
 let lastRetro: string | null = null;
+let panePollingInterval: ReturnType<typeof setInterval> | null = null;
+let tmuxSessionCheckInterval: ReturnType<typeof setInterval> | null = null;
 
 // --- HTTP handlers ---
 
@@ -67,12 +81,94 @@ function serveUI(_req: IncomingMessage, res: ServerResponse) {
   });
 }
 
+function stopPanePolling() {
+  if (panePollingInterval) {
+    clearInterval(panePollingInterval);
+    panePollingInterval = null;
+  }
+  if (tmuxSessionCheckInterval) {
+    clearInterval(tmuxSessionCheckInterval);
+    tmuxSessionCheckInterval = null;
+  }
+}
+
+function startPanePolling() {
+  if (panePollingInterval) return;
+  const session = state.tmuxSessionName;
+  if (!session) return;
+
+  panePollingInterval = setInterval(async () => {
+    const panes = await tmux.listPanes(session);
+    for (const pane of panes) {
+      const target = `${session}:0.${pane.index}`;
+      const content = await tmux.pollPane(target);
+      if (content === null) continue;
+
+      let paneName: string | null = null;
+      if (pane.index === 0) {
+        paneName = "orchestrator";
+      } else {
+        for (const agent of state.agents) {
+          if (tmux.getPaneForAgent(agent.name) === String(pane.index)) {
+            paneName = agent.name;
+            break;
+          }
+        }
+      }
+
+      broadcast({
+        type: "terminal_output",
+        agentName: paneName ?? `pane-${pane.index}`,
+        paneIndex: pane.index,
+        content,
+      });
+    }
+  }, 300);
+}
+
+async function launchViaTmux(
+  prompt: string,
+  sessionName: string,
+  res: ServerResponse,
+  cors: Record<string, string>,
+  startedAt: number
+) {
+  await tmux.createSession(sessionName);
+  state.tmuxSessionName = sessionName;
+
+  // Send the claude command into pane 0
+  const cmd = `claude -p ${shellEscape(prompt)} --permission-mode bypassPermissions`;
+  await tmux.sendKeys(`${sessionName}:0.0`, cmd);
+  await tmux.sendSpecialKey(`${sessionName}:0.0`, "Enter");
+
+  console.log(`[sprint] Launched claude in tmux session: ${sessionName}`);
+  broadcast({ type: "process_started", pid: 0 });
+
+  // Poll tmux has-session for exit detection
+  tmuxSessionCheckInterval = setInterval(async () => {
+    const alive = await tmux.hasSession(sessionName);
+    if (!alive) {
+      console.log(`[sprint] tmux session ${sessionName} ended`);
+      stopPanePolling();
+      sprintProcess = null;
+      broadcast({ type: "process_exited", code: 0 });
+    }
+  }, 5000);
+
+  res.writeHead(200, { "Content-Type": "application/json", ...cors });
+  res.end(JSON.stringify({ pid: 0, startedAt, tmux: true }));
+}
+
+function shellEscape(s: string): string {
+  return "'" + s.replace(/'/g, "'\\''") + "'";
+}
+
 function handleLaunch(
   req: IncomingMessage,
   res: ServerResponse,
   cors: Record<string, string>
 ) {
-  if (sprintProcess) {
+  if (sprintProcess || state.tmuxSessionName) {
     res.writeHead(409, { "Content-Type": "application/json", ...cors });
     res.end(JSON.stringify({ error: "Sprint already running" }));
     return;
@@ -103,38 +199,8 @@ function handleLaunch(
         includePM,
         cycles
       );
-      const env = { ...process.env };
-      delete env.CLAUDECODE;
-      const child = spawn(
-        "claude",
-        ["-p", prompt, "--permission-mode", "bypassPermissions"],
-        { stdio: ["ignore", "pipe", "pipe"], env }
-      );
 
-      sprintProcess = {
-        pid: child.pid!,
-        process: child,
-        startedAt: Date.now(),
-        config: { roadmap, engineers, includePM },
-      };
-
-      console.log(`[sprint] Launched claude process (PID ${child.pid})`);
-      broadcast({ type: "process_started", pid: child.pid! });
-
-      child.stdout?.on("data", (d: Buffer) =>
-        process.stdout.write(`[claude] ${d}`)
-      );
-      child.stderr?.on("data", (d: Buffer) =>
-        process.stderr.write(`[claude:err] ${d}`)
-      );
-
-      child.on("exit", (code) => {
-        console.log(`[sprint] Claude process exited (code ${code})`);
-        sprintProcess = null;
-        broadcast({ type: "process_exited", code });
-      });
-
-      const { pid, startedAt } = sprintProcess;
+      const startedAt = Date.now();
 
       createSprintBranch(
         state.teamName ?? "sprint",
@@ -145,13 +211,71 @@ function handleLaunch(
         if (branch) console.log(`[git] Sprint branch: ${branch}`);
       });
 
-      res.writeHead(200, { "Content-Type": "application/json", ...cors });
-      res.end(JSON.stringify({ pid, startedAt }));
+      // --- Tmux path ---
+      if (state.tmuxAvailable) {
+        const sessionName = `tc-${Date.now()}`;
+        launchViaTmux(prompt, sessionName, res, cors, startedAt).catch(
+          (err) => {
+            console.error("[tmux] Failed to launch via tmux:", err.message);
+            // Fallback to child_process
+            launchViaSpawn(prompt, roadmap, engineers, includePM, startedAt, res, cors);
+          }
+        );
+        return;
+      }
+
+      // --- Fallback: child_process path ---
+      launchViaSpawn(prompt, roadmap, engineers, includePM, startedAt, res, cors);
     } catch (err: any) {
       res.writeHead(400, { "Content-Type": "application/json", ...cors });
       res.end(JSON.stringify({ error: err.message }));
     }
   });
+}
+
+function launchViaSpawn(
+  prompt: string,
+  roadmap: string,
+  engineers: number,
+  includePM: boolean,
+  startedAt: number,
+  res: ServerResponse,
+  cors: Record<string, string>
+) {
+  const env = { ...process.env };
+  delete env.CLAUDECODE;
+  const child = spawn(
+    "claude",
+    ["-p", prompt, "--permission-mode", "bypassPermissions"],
+    { stdio: ["ignore", "pipe", "pipe"], env }
+  );
+
+  sprintProcess = {
+    pid: child.pid!,
+    process: child,
+    startedAt,
+    config: { roadmap, engineers, includePM },
+  };
+
+  console.log(`[sprint] Launched claude process (PID ${child.pid})`);
+  broadcast({ type: "process_started", pid: child.pid! });
+
+  child.stdout?.on("data", (d: Buffer) =>
+    process.stdout.write(`[claude] ${d}`)
+  );
+  child.stderr?.on("data", (d: Buffer) =>
+    process.stderr.write(`[claude:err] ${d}`)
+  );
+
+  child.on("exit", (code) => {
+    console.log(`[sprint] Claude process exited (code ${code})`);
+    sprintProcess = null;
+    broadcast({ type: "process_exited", code });
+  });
+
+  const { pid } = sprintProcess;
+  res.writeHead(200, { "Content-Type": "application/json", ...cors });
+  res.end(JSON.stringify({ pid, startedAt }));
 }
 
 function handleRequest(req: IncomingMessage, res: ServerResponse) {
@@ -184,19 +308,28 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
   } else if (req.url === "/api/launch" && req.method === "POST") {
     handleLaunch(req, res, cors);
   } else if (req.url === "/api/stop" && req.method === "POST") {
-    const wasRunning = !!sprintProcess;
+    const wasRunning = !!sprintProcess || !!state.tmuxSessionName;
+    const startedAt = sprintProcess?.startedAt ?? Date.now();
     if (sprintProcess) {
       sprintProcess.process.kill("SIGTERM");
-      const startedAt = sprintProcess.startedAt;
       sprintProcess = null;
-      if (wasRunning) recordSprintCompletion(state, startedAt);
     }
+    // Kill tmux session if active
+    if (state.tmuxSessionName) {
+      tmux.killSession(state.tmuxSessionName).catch(() => {});
+      stopPanePolling();
+      tmux.reset();
+    }
+    if (wasRunning) recordSprintCompletion(state, startedAt);
     const stateCopy = { ...state, tasks: [...state.tasks], messages: [...state.messages], agents: [...state.agents] };
     const history = loadSprintHistory();
     lastRetro = generateRetro(stateCopy, history);
     const branchAtStop = sprintBranch;
     sprintBranch = null;
+    const tmuxWasAvailable = state.tmuxAvailable;
     resetState();
+    state.projectName = detectProjectName();
+    state.tmuxAvailable = tmuxWasAvailable;
     broadcast({ type: "init", state });
     generatePRSummary(stateCopy, process.cwd()).then((prSummary) => {
       res.writeHead(200, { "Content-Type": "application/json", ...cors });
@@ -280,7 +413,59 @@ const wss = new WebSocketServer({ server });
 wss.on("connection", (ws) => {
   clients.add(ws);
   ws.send(JSON.stringify({ type: "init", state }));
+
+  ws.on("message", (raw) => {
+    try {
+      const msg = JSON.parse(String(raw));
+      if (msg.type === "terminal_input" && msg.agentName && msg.data && state.tmuxSessionName) {
+        const paneIdx = tmux.getPaneForAgent(msg.agentName);
+        if (paneIdx !== null) {
+          const target = `${state.tmuxSessionName}:0.${paneIdx}`;
+          tmux.sendKeys(target, msg.data).catch(() => {});
+        }
+      }
+    } catch {}
+  });
+
   ws.on("close", () => clients.delete(ws));
+});
+
+// --- Tmux detection ---
+tmux.isTmuxAvailable().then((available) => {
+  state.tmuxAvailable = available;
+  console.log(`[tmux] ${available ? "available" : "not available"}`);
+});
+
+// --- Team discovered hook: attribute panes + start polling ---
+setTeamDiscoveredHook((agents) => {
+  if (!state.tmuxSessionName) return;
+  const session = state.tmuxSessionName;
+
+  tmux.attributePanes(session, agents);
+  console.log(`[tmux] Attributed ${agents.length} agents to panes`);
+
+  // Wait for panes to appear (Claude creates splits asynchronously)
+  let retries = 0;
+  const waitForPanes = setInterval(async () => {
+    retries++;
+    const panes = await tmux.listPanes(session);
+    if (panes.length > 1 || retries >= 10) {
+      clearInterval(waitForPanes);
+      const discovered = panes.map((p) => {
+        let agentName: string | null = null;
+        for (const a of agents) {
+          if (tmux.getPaneForAgent(a) === String(p.index)) {
+            agentName = a;
+            break;
+          }
+        }
+        return { agentName, paneIndex: p.index };
+      });
+      broadcast({ type: "panes_discovered", panes: discovered });
+      startPanePolling();
+      console.log(`[tmux] Pane polling started (${panes.length} panes)`);
+    }
+  }, 2000);
 });
 
 state.projectName = detectProjectName();
@@ -295,6 +480,12 @@ function cleanup() {
   if (sprintProcess) {
     sprintProcess.process.kill("SIGTERM");
     sprintProcess = null;
+  }
+  if (state.tmuxSessionName) {
+    // Synchronous-ish: fire and forget, then exit
+    tmux.killSession(state.tmuxSessionName).catch(() => {});
+    stopPanePolling();
+    tmux.reset();
   }
   process.exit(0);
 }

@@ -1066,6 +1066,40 @@
     line-height: 1.5;
   }
 
+  /* Retro Modal */
+  .retro-modal { max-width: 640px; width: 100%; max-height: 80vh; overflow-y: auto; }
+  .retro-branch {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--accent);
+    background: var(--accent-glow);
+    padding: 4px 10px;
+    border-radius: 6px;
+    align-self: flex-start;
+  }
+  .retro-body {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+  .retro-pr-wrap { display: flex; flex-direction: column; gap: 6px; }
+  .retro-pr-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
+  .retro-pr {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-primary);
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    overflow-x: auto;
+    white-space: pre;
+    margin: 0;
+    cursor: text;
+    user-select: all;
+  }
+
   .checkpoint-modal-actions {
     display: flex;
     gap: 10px;
@@ -1321,7 +1355,71 @@
     text-align: right;
     white-space: nowrap;
   }
+
+  /* Terminal View */
+  .terminal-view {
+    display: none;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .terminal-view.active {
+    display: flex;
+  }
+  .terminal-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .terminal-back-btn {
+    padding: 3px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .terminal-back-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .terminal-agent-name {
+    font-family: var(--font-display);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .terminal-pane-hint {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-left: auto;
+  }
+  .terminal-container {
+    flex: 1;
+    min-height: 0;
+    padding: 4px;
+    background: #000;
+  }
+  .terminal-container .xterm {
+    height: 100%;
+  }
+
+  /* Clickable agent nodes when tmux is available */
+  .agent-clickable { cursor: pointer; }
+  .agent-clickable:hover { opacity: 0.85; }
 </style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
 </head>
 <body>
 
@@ -1394,6 +1492,21 @@
     </div>
   </div>
 
+  <div class="checkpoint-overlay hidden" id="retro-overlay">
+    <div class="checkpoint-modal retro-modal">
+      <div class="checkpoint-modal-title">Sprint Complete</div>
+      <div id="retro-branch" class="retro-branch"></div>
+      <div id="retro-body" class="retro-body"></div>
+      <div id="retro-pr-wrap" class="retro-pr-wrap">
+        <div class="retro-pr-label">PR Summary</div>
+        <pre id="retro-pr" class="retro-pr"></pre>
+      </div>
+      <div class="checkpoint-modal-actions">
+        <button class="checkpoint-approve-btn" id="retro-close-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div class="sprint-bar">
     <span class="sprint-bar-title">Sprint</span>
     <span class="sprint-bar-project" id="project-name"></span>
@@ -1426,6 +1539,14 @@
           <span class="token-count" id="token-total">0 tok</span>
         </div>
         <div class="token-bars" id="token-bars"></div>
+      </div>
+      <div class="terminal-view" id="terminal-view">
+        <div class="terminal-header">
+          <button class="terminal-back-btn" id="terminal-back-btn">&larr; Back</button>
+          <span class="terminal-agent-name" id="terminal-agent-name"></span>
+          <span class="terminal-pane-hint" id="terminal-pane-hint"></span>
+        </div>
+        <div class="terminal-container" id="terminal-container"></div>
       </div>
     </div>
 
@@ -1469,7 +1590,7 @@
   let reconnectDelay = 500;
   let currentPhase = 'setup';
 
-  const state = { agents: [], tasks: [], messages: [], teamName: null, projectName: null, paused: false, escalation: null, mode: 'manual', cycle: 0, phase: 'idle', tokenUsage: { total: 0, byAgent: {}, estimatedCostUsd: 0 }, checkpoints: [], pendingCheckpoint: null };
+  const state = { agents: [], tasks: [], messages: [], teamName: null, projectName: null, paused: false, escalation: null, mode: 'manual', cycle: 0, phase: 'idle', tokenUsage: { total: 0, byAgent: {}, estimatedCostUsd: 0 }, checkpoints: [], pendingCheckpoint: null, tmuxAvailable: false, tmuxSessionName: null };
   const reviewTaskIds = new Set();
   let taskView = 'list'; // 'list' | 'board'
   let depArrowsVisible = false;
@@ -1517,8 +1638,25 @@
     escalationDismiss.addEventListener('click', () => { fetch('/api/dismiss-escalation', { method: 'POST' }); });
     stopBtn.addEventListener('click', async () => {
       stopBtn.disabled = true;
-      await fetch('/api/stop', { method: 'POST' });
+      const res = await fetch('/api/stop', { method: 'POST' });
       stopBtn.disabled = false;
+      const data = await res.json().catch(() => ({}));
+      if (data.retro || data.prSummary) {
+        const overlay = $('retro-overlay');
+        $('retro-branch').textContent = data.branch ? `branch: ${data.branch}` : '';
+        $('retro-branch').style.display = data.branch ? '' : 'none';
+        $('retro-body').textContent = data.retro ?? '';
+        $('retro-body').style.display = data.retro ? '' : 'none';
+        $('retro-pr-wrap').style.display = data.prSummary ? '' : 'none';
+        $('retro-pr').textContent = data.prSummary ?? '';
+        overlay.classList.remove('hidden');
+      } else {
+        switchPhase('setup');
+      }
+    });
+
+    $('retro-close-btn').addEventListener('click', () => {
+      $('retro-overlay').classList.add('hidden');
       switchPhase('setup');
     });
     viewToggle.addEventListener('click', () => {
@@ -1607,7 +1745,10 @@
       bindSprintElements();
       renderAll();
     }
-    if (phase === 'setup') renderSetupPreview();
+    if (phase === 'setup') {
+      if (activeTerminal) closeTerminal();
+      renderSetupPreview();
+    }
   }
 
   // --- Setup Phase ---
@@ -1774,7 +1915,7 @@
 
   // --- Sprint Phase: Agent Node Rendering ---
 
-  function createAgentNode(svg, cx, cy, label, role, stroke, fill, key) {
+  function createAgentNode(svg, cx, cy, label, role, stroke, fill, key, agentName) {
     svg.appendChild(svgEl('circle', { id: 'pulse-' + key, class: 'pulse-ring', cx, cy, r: 38, fill: 'none', stroke, 'stroke-width': '2' }));
     svg.appendChild(svgEl('circle', { cx, cy, r: 32, fill, stroke, 'stroke-width': '2' }));
     const lbl = svgEl('text', { class: 'node-label', x: cx, y: cy - 3, 'text-anchor': 'middle' });
@@ -1784,6 +1925,13 @@
     rl.textContent = role;
     svg.appendChild(rl);
     svg.appendChild(svgEl('circle', { id: 'status-' + key, cx: cx + 24, cy: cy - 24, r: 5, fill: '#22c55e' }));
+
+    // Clickable overlay for terminal access when tmux is available
+    if (state.tmuxAvailable && agentName) {
+      const hitArea = svgEl('circle', { cx, cy, r: 36, fill: 'transparent', class: 'agent-clickable', 'data-agent': agentName });
+      hitArea.addEventListener('click', () => openTerminal(agentName));
+      svg.appendChild(hitArea);
+    }
   }
 
   function renderAgents() {
@@ -1833,14 +1981,14 @@
         d: `M ${centerX} ${pmY + 32} C ${centerX} ${(pmY + mgrY) / 2}, ${centerX} ${(pmY + mgrY) / 2}, ${centerX} ${mgrY - 32}`,
         stroke: '#334155', 'stroke-width': '2', fill: 'none', 'stroke-dasharray': '4 4'
       }));
-      createAgentNode(svg, centerX, pmY, 'PM', 'product mgr', '#a78bfa', '#2e1065', 'pm');
+      createAgentNode(svg, centerX, pmY, 'PM', 'product mgr', '#a78bfa', '#2e1065', 'pm', 'sprint-pm');
     } else {
       mgrY = 100;
       engY = 260;
       svg.setAttribute('viewBox', `0 0 ${width} 340`);
     }
 
-    createAgentNode(svg, centerX, mgrY, 'MGR', 'manager', '#3b82f6', '#1e3a5f', 'manager');
+    createAgentNode(svg, centerX, mgrY, 'MGR', 'manager', '#3b82f6', '#1e3a5f', 'manager', 'sprint-manager');
 
     const totalW = (engCount - 1) * nodeSpacing;
     const startX = centerX - totalW / 2;
@@ -1856,7 +2004,7 @@
         d: `M ${centerX} ${mgrY + 32} C ${centerX} ${(mgrY + engY) / 2}, ${ex} ${(mgrY + engY) / 2}, ${ex} ${engY - 32}`,
         stroke: '#334155', 'stroke-width': '2', fill: 'none', 'stroke-dasharray': '4 4'
       }));
-      createAgentNode(svg, ex, engY, label, 'engineer', '#22c55e', '#14332a', key);
+      createAgentNode(svg, ex, engY, label, 'engineer', '#22c55e', '#14332a', key, engName);
     }
 
     // Animation dots
@@ -1892,6 +2040,8 @@
         Object.assign(state, event.state);
         reviewTaskIds.clear();
         if (event.state.reviewTaskIds) event.state.reviewTaskIds.forEach(id => reviewTaskIds.add(id));
+        // Close terminal if sprint was reset
+        if (!state.tmuxSessionName && activeTerminal) closeTerminal();
         if (state.teamName && currentPhase === 'setup') switchPhase('sprint');
         if (currentPhase === 'sprint') renderAll();
         break;
@@ -1949,6 +2099,16 @@
         break;
       case 'process_exited':
         // Keep sprint phase visible so user can see final state
+        break;
+      case 'terminal_output':
+        handleTerminalOutput(event.agentName, event.content);
+        break;
+      case 'panes_discovered':
+        for (const p of event.panes) {
+          if (p.agentName) paneMap[p.agentName] = p.paneIndex;
+        }
+        // Re-render agents to add click targets now that panes are known
+        if (currentPhase === 'sprint') renderAgents();
         break;
     }
   }
@@ -2590,11 +2750,116 @@
     wrap.appendChild(table);
   }
 
+  // --- Terminal View ---
+
+  let activeTerminal = null;  // { agentName, term, fitAddon }
+  const paneMap = {};         // agentName → paneIndex
+
+  function openTerminal(agentName) {
+    if (!state.tmuxAvailable) return;
+    const svgEl = $('agents-svg');
+    const tokenPanel = $('token-panel');
+    const termView = $('terminal-view');
+    const termContainer = $('terminal-container');
+
+    // Hide SVG + token panel, show terminal
+    if (svgEl) svgEl.style.display = 'none';
+    if (tokenPanel) tokenPanel.style.display = 'none';
+    // Hide loading state if present
+    const loader = svgEl?.parentElement?.querySelector('.loading-state');
+    if (loader) loader.style.display = 'none';
+
+    termView.classList.add('active');
+    $('terminal-agent-name').textContent = displayName(agentName);
+    const pIdx = paneMap[agentName];
+    $('terminal-pane-hint').textContent = pIdx != null ? `pane ${pIdx}` : '';
+
+    // Create xterm instance
+    termContainer.textContent = '';
+    const term = new Terminal({
+      theme: {
+        background: '#0b1120',
+        foreground: '#e8edf5',
+        cursor: '#06b6d4',
+        selectionBackground: 'rgba(6, 182, 212, 0.3)',
+      },
+      fontFamily: "'IBM Plex Mono', monospace",
+      fontSize: 12,
+      cursorBlink: true,
+      convertEol: true,
+      scrollback: 5000,
+    });
+    const fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(termContainer);
+
+    // Delay fit to allow DOM layout
+    requestAnimationFrame(() => {
+      try { fitAddon.fit(); } catch {}
+    });
+
+    // Keyboard passthrough to server
+    term.onData((data) => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'terminal_input', agentName, data }));
+      }
+    });
+
+    activeTerminal = { agentName, term, fitAddon };
+
+    // Resize on window resize
+    window.addEventListener('resize', handleTerminalResize);
+  }
+
+  function closeTerminal() {
+    const termView = $('terminal-view');
+    const svgEl = $('agents-svg');
+    const tokenPanel = $('token-panel');
+
+    termView.classList.remove('active');
+
+    if (activeTerminal) {
+      activeTerminal.term.dispose();
+      activeTerminal = null;
+    }
+    $('terminal-container').textContent = '';
+
+    // Restore SVG + token panel
+    if (svgEl) svgEl.style.display = '';
+    if (tokenPanel && state.tokenUsage.total > 0) tokenPanel.style.display = '';
+    // Restore loading state visibility
+    const loader = svgEl?.parentElement?.querySelector('.loading-state');
+    if (loader && !state.agents.length) loader.style.display = '';
+
+    window.removeEventListener('resize', handleTerminalResize);
+  }
+
+  function handleTerminalResize() {
+    if (activeTerminal?.fitAddon) {
+      try { activeTerminal.fitAddon.fit(); } catch {}
+    }
+  }
+
+  function handleTerminalOutput(agentName, content) {
+    if (activeTerminal && activeTerminal.agentName === agentName) {
+      // Clear and rewrite (capture-pane gives full screen content)
+      activeTerminal.term.clear();
+      activeTerminal.term.write(content);
+    }
+  }
+
   // --- Init ---
 
   async function init() {
     initSetup();
     connect();
+
+    // Wire up terminal back button
+    document.addEventListener('click', (e) => {
+      if (e.target.id === 'terminal-back-btn' || e.target.closest('#terminal-back-btn')) {
+        closeTerminal();
+      }
+    });
 
     // Check if sprint is already running
     try {

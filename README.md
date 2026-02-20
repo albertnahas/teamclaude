@@ -15,7 +15,8 @@ Then use `/sprint` in Claude Code.
 ### Option B: Plugin
 
 ```bash
-claude plugins add albertnahas/teamclaude
+claude plugin marketplace add albertnahas/teamclaude
+claude plugin install teamclaude@teamclaude
 ```
 
 Auto-registers agents, commands, and skills. Uses `npx teamclaude` for the server.
@@ -62,10 +63,28 @@ A PM agent analyzes the codebase (reads `CLAUDE.md`, runs tests, scans for TODOs
 ### Dashboard Features
 
 - Live agent nodes with active/idle status pulses
+- **Terminal view** — click any agent node to see their live tmux terminal output and send keystrokes
 - Task board (list or kanban view) with real-time status updates
 - Protocol-tagged message feed (TASK_ASSIGNED, READY_FOR_REVIEW, APPROVED, etc.)
+- **Token cost tracking** — real-time token usage per agent with estimated USD cost (model-aware pricing)
+- **Sprint analytics** — historical completion rates, review rounds, velocity trends across cycles
+- **Retrospective** — auto-generated markdown retro on sprint stop (summary, task results, team performance)
+- **Human checkpoints** — pause the sprint before specific tasks for manual review
+- **Git integration** — auto-creates sprint branches (`sprint/<team>-cycleN`), generates PR summaries on stop
 - Cycle/phase indicator for autonomous mode
 - Resizable panels, escalation alerts, pause/stop controls
+
+### Tmux Terminal Integration
+
+When tmux is installed, agents launch inside a tmux session instead of a background process. This enables:
+
+- **Live terminal view** — click any agent node in the dashboard to see their real-time terminal output (with ANSI color support via xterm.js)
+- **Interactive input** — type directly in the terminal to send keystrokes to the agent's tmux pane
+- **Pane-per-agent** — each agent gets its own tmux pane, auto-mapped when the team is discovered
+
+If tmux is not installed, the dashboard works exactly as before — agents run as background processes and terminal features are hidden.
+
+**Requirements:** `tmux` must be on PATH. Install via `brew install tmux` (macOS) or `apt install tmux` (Linux).
 
 ## CLI Commands
 
@@ -105,14 +124,16 @@ verification:
   test: "pnpm test --run"
 
 agents:
-  model: sonnet
+  model: sonnet    # haiku | sonnet | opus — affects token cost estimates
 
 sprint:
   max_review_rounds: 3
 
 server:
-  port: 3456
+  port: 3456       # also configurable via --port flag
 ```
+
+Token cost estimates use per-model pricing (haiku: $0.80/$4, sonnet: $3/$15, opus: $15/$75 per million input/output tokens). The model is read from `agents.model` in `.sprint.yml`, defaulting to sonnet.
 
 ## How It Works
 
@@ -122,17 +143,17 @@ server:
 ~/.claude/tasks/<team>/*.json          ──┘  watches
                                            │
                                      ┌─────▼─────┐
-                                     │   server   │
-                                     │ HTTP + WS  │
-                                     └─────┬──────┘
+              tmux (panes) ◄────────►│   server   │
+              capture-pane           │ HTTP + WS  │
+              send-keys              └─────┬──────┘
                                            │
                                      ┌─────▼─────┐
                                      │  browser   │
-                                     │ dashboard  │
+                                     │ xterm.js   │
                                      └────────────┘
 ```
 
-The server is a **read-only observer** — it never writes to agent files. It watches Claude Code's native Agent Teams file system and streams deltas to the browser via WebSocket.
+The server watches Claude Code's native Agent Teams file system and streams deltas to the browser via WebSocket. When tmux is available, it also polls tmux panes for terminal output and relays keyboard input from the browser to agent panes via `send-keys`. On sprint stop, it records analytics to `~/.claude/teamclaude-analytics.json`, generates a retrospective, and creates a PR summary from the sprint branch.
 
 ### Agent Roles
 
@@ -158,6 +179,26 @@ Agents communicate via structured prefixed messages that the dashboard detects a
 | `SPRINT_COMPLETE:` | Manager → PM | All tasks done (autonomous) |
 | `ACCEPTANCE:` | PM → Manager | Validation pass/fail (autonomous) |
 
+## API
+
+The server exposes a REST API alongside the WebSocket stream:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/state` | GET | Full sprint state snapshot |
+| `/api/launch` | POST | Launch a sprint (`{ roadmap, engineers, includePM, cycles }`) |
+| `/api/stop` | POST | Stop sprint, record analytics, generate retro + PR summary |
+| `/api/pause` | POST | Toggle pause/resume |
+| `/api/process-status` | GET | Running process info (PID, startedAt) |
+| `/api/analytics` | GET | Sprint history (`?cycle=N&limit=N` filters) |
+| `/api/retro` | GET | Last generated retrospective (markdown) |
+| `/api/git-status` | GET | Current branch + sprint branch status |
+| `/api/checkpoint` | POST | Set a human checkpoint on a task (`{ taskId }`) |
+| `/api/checkpoint/release` | POST | Release a pending checkpoint |
+| `/api/dismiss-escalation` | POST | Dismiss an escalation alert |
+
+WebSocket events: `init`, `task_updated`, `message_sent`, `agent_status`, `token_usage`, `checkpoint`, `cycle_info`, `paused`, `escalation`, `process_started`, `process_exited`, `terminal_output`, `panes_discovered`.
+
 ## Architecture
 
 ```
@@ -172,12 +213,16 @@ teamclaude/
 ├── commands/sprint.md          # /sprint slash command
 ├── skills/sprint.md            # Skill trigger
 ├── server/
-│   ├── index.ts                # HTTP + WebSocket server (--port flag)
-│   ├── watcher.ts              # File system watcher (chokidar)
-│   ├── state.ts                # Types + state management
+│   ├── index.ts                # HTTP + WebSocket server + API endpoints
+│   ├── watcher.ts              # File system watcher (chokidar) + protocol inference
+│   ├── state.ts                # Types + state management + project detection
+│   ├── analytics.ts            # Sprint history recording + loading
+│   ├── git.ts                  # Sprint branch creation + PR summary generation
+│   ├── retro.ts                # Auto-generated sprint retrospectives
+│   ├── tmux.ts                 # Tmux session lifecycle + pane I/O
 │   ├── protocol.ts             # Message protocol detection
 │   ├── prompt.ts               # Sprint prompt compilation
-│   └── ui.html                 # Dashboard UI (single-file, zero deps)
+│   └── ui.html                 # Dashboard UI (xterm.js for terminal view)
 ├── bin/teamclaude.js           # CLI entry point
 └── .sprint.example.yml         # Example project config
 ```

@@ -26,15 +26,15 @@ export async function createSprintBranch(
   cwd: string
 ): Promise<string | null> {
   const branch = `sprint/${teamName}-cycle${cycle}`;
-  const result = await git(["checkout", "-b", branch], cwd);
-  // execFile on `git checkout -b` writes to stderr, stdout is empty on success
-  // A null result means git failed (not a repo, branch already exists, etc.)
-  if (result === null) {
-    // Try reading current branch — maybe it already exists and we're on it
+  try {
+    // git checkout -b writes to stderr; exit code 0 means success regardless of stdout
+    await execFileAsync("git", ["checkout", "-b", branch], { cwd });
+    return branch;
+  } catch {
+    // Branch may already exist — verify we're on it
     const current = await getCurrentBranch(cwd);
     return current === branch ? branch : null;
   }
-  return branch;
 }
 
 export async function generatePRSummary(
