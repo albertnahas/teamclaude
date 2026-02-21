@@ -30,6 +30,14 @@ export interface Message {
   protocol?: string;
 }
 
+export interface MergeConflict {
+  engineerName: string;
+  baseBranch: string;
+  worktreeBranch: string;
+  conflictingFiles: string[];
+  timestamp: number;
+}
+
 export interface SprintState {
   teamName: string | null;
   projectName: string | null;
@@ -43,6 +51,7 @@ export interface SprintState {
     from: string;
     timestamp: number;
   } | null;
+  mergeConflict: MergeConflict | null;
   mode: "manual" | "autonomous";
   cycle: number;
   phase: "idle" | "analyzing" | "sprinting" | "validating";
@@ -65,6 +74,7 @@ export type WsEvent =
   | { type: "agent_status"; agent: AgentInfo }
   | { type: "paused"; paused: boolean }
   | { type: "escalation"; escalation: SprintState["escalation"] }
+  | { type: "merge_conflict"; mergeConflict: MergeConflict | null }
   | {
       type: "cycle_info";
       cycle: number;
@@ -73,6 +83,7 @@ export type WsEvent =
     }
   | { type: "token_usage"; usage: SprintState["tokenUsage"] }
   | { type: "checkpoint"; checkpoint: SprintState["pendingCheckpoint"] }
+  | { type: "validation"; validation: { passed: boolean; results: { name: string; command: string; passed: boolean; output: string }[] } }
   | { type: "process_started"; pid: number }
   | { type: "process_exited"; code: number | null }
   | { type: "terminal_output"; agentName: string; paneIndex: number; content: string }
@@ -88,6 +99,7 @@ export const state: SprintState = {
   messages: [],
   paused: false,
   escalation: null,
+  mergeConflict: null,
   mode: "manual",
   cycle: 0,
   phase: "idle",
@@ -173,6 +185,7 @@ export function resetState() {
   state.mode = "manual";
   state.paused = false;
   state.escalation = null;
+  state.mergeConflict = null;
   state.cycle = 0;
   state.phase = "idle";
   state.reviewTaskIds = [];

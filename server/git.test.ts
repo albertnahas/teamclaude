@@ -94,6 +94,7 @@ describe("generatePRSummary", () => {
     pendingCheckpoint: null,
     tmuxAvailable: false,
     tmuxSessionName: null,
+    mergeConflict: null,
   };
 
   it("includes sprint name, cycle, task stats, and commits", async () => {

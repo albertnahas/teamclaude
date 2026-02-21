@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join } from "node:path";
 import { homedir } from "node:os";
+import { analyticsPath, ensureStorageDir, ensureSprintHistoryDir } from "./storage.js";
 import type { SprintState } from "./state.js";
 
 // --- Types ---
@@ -18,16 +19,13 @@ export interface SprintRecord {
   agents: string[];
 }
 
-// --- Paths ---
-
-const ANALYTICS_PATH = join(homedir(), ".claude", "teamclaude-analytics.json");
-
 // --- Helpers ---
 
 function readAnalytics(): SprintRecord[] {
-  if (!existsSync(ANALYTICS_PATH)) return [];
+  const path = analyticsPath();
+  if (!existsSync(path)) return [];
   try {
-    const raw = readFileSync(ANALYTICS_PATH, "utf-8");
+    const raw = readFileSync(path, "utf-8");
     const parsed: unknown = JSON.parse(raw);
     return Array.isArray(parsed) ? (parsed as SprintRecord[]) : [];
   } catch {
@@ -55,7 +53,7 @@ function computeAvgReviewRounds(state: SprintState): number {
 export function recordSprintCompletion(
   state: SprintState,
   startedAt?: number
-): void {
+): SprintRecord {
   const records = readAnalytics();
 
   const record: SprintRecord = {
@@ -73,11 +71,70 @@ export function recordSprintCompletion(
 
   records.push(record);
 
-  const dir = dirname(ANALYTICS_PATH);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(ANALYTICS_PATH, JSON.stringify(records, null, 2), "utf-8");
+  ensureStorageDir();
+  writeFileSync(analyticsPath(), JSON.stringify(records, null, 2), "utf-8");
+
+  return record;
 }
 
 export function loadSprintHistory(): SprintRecord[] {
   return readAnalytics();
+}
+
+export function saveSprintSnapshot(
+  sprintId: string,
+  state: SprintState
+): void {
+  const dir = ensureSprintHistoryDir(sprintId);
+  writeFileSync(
+    join(dir, "tasks.json"),
+    JSON.stringify(state.tasks, null, 2),
+    "utf-8"
+  );
+  writeFileSync(
+    join(dir, "messages.json"),
+    JSON.stringify(state.messages, null, 2),
+    "utf-8"
+  );
+}
+
+export function saveRetroToHistory(sprintId: string, retro: string): void {
+  const dir = ensureSprintHistoryDir(sprintId);
+  writeFileSync(join(dir, "retro.md"), retro, "utf-8");
+}
+
+export function saveRecordToHistory(
+  sprintId: string,
+  record: SprintRecord
+): void {
+  const dir = ensureSprintHistoryDir(sprintId);
+  writeFileSync(
+    join(dir, "record.json"),
+    JSON.stringify(record, null, 2),
+    "utf-8"
+  );
+}
+
+/**
+ * One-time migration: import records from the legacy global analytics file
+ * (~/.claude/teamclaude-analytics.json) into the local .teamclaude/analytics.json.
+ * Only runs if the local file does not yet exist.
+ */
+export function migrateGlobalAnalytics(): void {
+  if (existsSync(analyticsPath())) return;
+
+  const globalPath = join(homedir(), ".claude", "teamclaude-analytics.json");
+  if (!existsSync(globalPath)) return;
+
+  try {
+    const raw = readFileSync(globalPath, "utf-8");
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return;
+
+    ensureStorageDir();
+    writeFileSync(analyticsPath(), JSON.stringify(parsed, null, 2), "utf-8");
+    console.log(`[analytics] Migrated ${parsed.length} records from global analytics`);
+  } catch {
+    // Silent — migration is best-effort
+  }
 }

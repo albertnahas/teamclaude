@@ -1,0 +1,41 @@
+name: Bug Bash
+description: Triage and fix a batch of bugs; QA agent verifies each fix before closing.
+
+agents:
+  roles:
+    - engineer
+    - engineer
+    - qa
+  model: sonnet
+
+cycles: 1
+
+verification:
+  # type_check: "npm run type-check"
+  # test: "npm test --run"
+
+sprint:
+  max_review_rounds: 3
+
+roadmap: |
+  ## Bug Bash Roadmap
+
+  ### 1. Triage
+  - [ ] Collect and categorise incoming bug reports
+  - [ ] Assign severity (critical / high / medium / low)
+  - [ ] Assign each bug to an engineer
+
+  ### 2. Fix
+  - [ ] Engineer 1: implement fixes for assigned bugs
+  - [ ] Engineer 2: implement fixes for assigned bugs
+  - [ ] Write or update unit tests for each fix
+
+  ### 3. Verify
+  - [ ] QA agent reproduces each bug against the fix branch
+  - [ ] Run full test suite — all tests must pass
+  - [ ] Confirm no regressions introduced
+
+  ### 4. Close
+  - [ ] Merge approved fixes to main
+  - [ ] Update issue tracker (close resolved, re-open regressions)
+  - [ ] Post sprint summary

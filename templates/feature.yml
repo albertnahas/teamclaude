@@ -1,0 +1,44 @@
+name: Feature
+description: PM writes the spec, engineer implements, manager reviews, then ship.
+
+agents:
+  roles:
+    - engineer
+    - pm
+  model: sonnet
+
+cycles: 2
+
+verification:
+  # type_check: "npm run type-check"
+  # test: "npm test --run"
+
+sprint:
+  max_review_rounds: 3
+
+roadmap: |
+  ## Feature Roadmap
+
+  ### 1. Spec
+  - [ ] PM documents feature requirements and acceptance criteria
+  - [ ] Edge cases and out-of-scope items explicitly listed
+  - [ ] Spec reviewed and approved by manager
+
+  ### 2. Implement
+  - [ ] Engineer scaffolds the feature
+  - [ ] Core logic implemented against the spec
+  - [ ] Unit and integration tests written
+
+  ### 3. Review
+  - [ ] Manager reviews implementation against spec
+  - [ ] Address review feedback (up to 3 rounds)
+
+  ### 4. Test
+  - [ ] Run full type-check — zero errors
+  - [ ] Run full test suite — all tests pass
+  - [ ] Acceptance criteria verified
+
+  ### 5. Ship
+  - [ ] Merge to main
+  - [ ] Deploy to production / staging
+  - [ ] Confirm feature is live and working

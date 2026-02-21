@@ -25,18 +25,20 @@ describe("compileSprintPrompt", () => {
       expect(prompt).toContain("sprint-engineer-1");
       expect(prompt).toContain("sprint-engineer-2");
     });
-
-    it("includes both engineer names in the prompt", () => {
-      const prompt = compileSprintPrompt("Build features", 2, false, 1);
-      expect(prompt).toContain("sprint-engineer-1");
-      expect(prompt).toContain("sprint-engineer-2");
-    });
   });
 
   describe("autonomous mode — 2 engineers", () => {
-    it("includes parallel instruction", () => {
+    it("includes round-robin distribution rule", () => {
       const prompt = compileSprintPrompt("Build features", 2, true, 1);
-      expect(prompt).toContain("parallel");
+      expect(prompt).toContain("round-robin");
+      expect(prompt).toContain("Distribute tasks evenly");
+    });
+
+    it("includes quality review instructions for manager", () => {
+      const prompt = compileSprintPrompt("Build features", 2, true, 1);
+      expect(prompt).toContain("dead code");
+      expect(prompt).toContain("duplicate");
+      expect(prompt).toContain("REQUEST_CHANGES");
     });
   });
 
@@ -57,6 +59,35 @@ describe("compileSprintPrompt", () => {
     it("omits roadmap section from PM prompt when roadmap is empty", () => {
       const prompt = compileSprintPrompt("", 1, true, 1);
       expect(prompt).not.toContain("User guidance:");
+    });
+
+    it("PM prompt requires acceptance criteria in task descriptions", () => {
+      const prompt = compileSprintPrompt("Build it", 1, true, 1);
+      expect(prompt).toContain("acceptance criteria");
+    });
+  });
+
+  describe("engineer quality instructions", () => {
+    it("tells engineers to run tests before submitting", () => {
+      const prompt = compileSprintPrompt("Build it", 1, false, 1);
+      expect(prompt).toContain("Run the project");
+      expect(prompt).toContain("test");
+    });
+
+    it("tells engineers NOT to mark tasks as completed", () => {
+      const prompt = compileSprintPrompt("Build it", 1, false, 1);
+      expect(prompt).toContain("Do NOT call TaskUpdate to set status");
+    });
+
+    it("tells engineers to search for existing patterns", () => {
+      const prompt = compileSprintPrompt("Build it", 1, false, 1);
+      expect(prompt).toContain("search the codebase");
+      expect(prompt).toContain("Do NOT create duplicates");
+    });
+
+    it("tells engineers to clean up dead code", () => {
+      const prompt = compileSprintPrompt("Build it", 1, false, 1);
+      expect(prompt).toContain("dead code");
     });
   });
 
@@ -86,6 +117,32 @@ describe("compileSprintPrompt", () => {
     it("uses a generated team name prefixed with sprint-", () => {
       const prompt = compileSprintPrompt("Any roadmap", 1, false, 1);
       expect(prompt).toMatch(/sprint-\d+/);
+    });
+  });
+
+  describe("learnings injection", () => {
+    it("includes learnings section when provided", () => {
+      const learnings = "## Sprint sprint-123\nCompleted: 3/5 tasks";
+      const prompt = compileSprintPrompt("Build it", 1, false, 1, learnings);
+      expect(prompt).toContain("## Past Sprint Learnings");
+      expect(prompt).toContain("Completed: 3/5 tasks");
+    });
+
+    it("omits learnings section when empty string", () => {
+      const prompt = compileSprintPrompt("Build it", 1, false, 1, "");
+      expect(prompt).not.toContain("Past Sprint Learnings");
+    });
+
+    it("omits learnings section when undefined", () => {
+      const prompt = compileSprintPrompt("Build it", 1, false, 1);
+      expect(prompt).not.toContain("Past Sprint Learnings");
+    });
+
+    it("injects learnings into PM prompt in autonomous mode", () => {
+      const learnings = "## Sprint sprint-456\nAvoid auth patterns";
+      const prompt = compileSprintPrompt("Plan it", 1, true, 1, learnings);
+      expect(prompt).toContain("Past sprint learnings");
+      expect(prompt).toContain("Avoid auth patterns");
     });
   });
 });

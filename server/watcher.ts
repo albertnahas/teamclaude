@@ -12,6 +12,7 @@ import {
 } from "./state.js";
 import { detectProtocol, extractContent } from "./protocol.js";
 import type { Message, TaskInfo } from "./state.js";
+import { runVerification } from "./verification.js";
 
 export function isSprintTeam(config: any): boolean {
   if (!config?.members) return false;
@@ -189,6 +190,12 @@ export function handleInboxMessage(filePath: string) {
           case "TASK_ASSIGNED":
             inferredStatus = "in_progress";
             inferredOwner = message.to;
+            break;
+          case "READY_FOR_REVIEW":
+            inferredStatus = "in_progress";
+            if (!state.reviewTaskIds.includes(tid))
+              state.reviewTaskIds.push(tid);
+            // Checkpoint gate: pause sprint for human review before manager acts
             if (state.checkpoints.includes(tid)) {
               state.checkpoints = state.checkpoints.filter((id) => id !== tid);
               const taskSubject =
@@ -196,11 +203,6 @@ export function handleInboxMessage(filePath: string) {
               state.pendingCheckpoint = { taskId: tid, taskSubject };
               broadcast({ type: "checkpoint", checkpoint: state.pendingCheckpoint });
             }
-            break;
-          case "READY_FOR_REVIEW":
-            inferredStatus = "in_progress";
-            if (!state.reviewTaskIds.includes(tid))
-              state.reviewTaskIds.push(tid);
             break;
           case "APPROVED":
             inferredStatus = "completed";
@@ -261,9 +263,11 @@ export function handleInboxMessage(filePath: string) {
       } else if (message.protocol === "CYCLE_COMPLETE") {
         state.phase = "validating";
         phaseChanged = true;
+        triggerValidation();
       } else if (message.protocol === "SPRINT_COMPLETE") {
         state.phase = "validating";
         phaseChanged = true;
+        triggerValidation();
       } else if (message.protocol === "ACCEPTANCE") {
         state.phase = "analyzing";
         phaseChanged = true;
@@ -358,6 +362,40 @@ export function handleTaskFile(filePath: string) {
 
     broadcast({ type: "task_updated", task });
   }
+}
+
+// --- Validation gate ---
+
+function triggerValidation() {
+  const cwd = process.cwd();
+  runVerification(cwd).then((result) => {
+    broadcast({ type: "validation", validation: result });
+    const statusLabel = result.passed ? "passed" : "FAILED";
+    const details = result.results.map((r) => `${r.name}: ${r.passed ? "pass" : "FAIL"}`).join(", ");
+    const sysMsg: Message = {
+      id: `sys-validation-${Date.now()}`,
+      timestamp: Date.now(),
+      from: "system",
+      to: "all",
+      content: result.results.length === 0
+        ? "Validation skipped — no verification commands configured"
+        : `Validation ${statusLabel}: ${details}`,
+    };
+    state.messages.push(sysMsg);
+    broadcast({ type: "message_sent", message: sysMsg });
+    if (!result.passed) {
+      state.escalation = {
+        taskId: "validation",
+        reason: `Verification failed: ${result.results.filter((r) => !r.passed).map((r) => r.name).join(", ")}`,
+        from: "system",
+        timestamp: Date.now(),
+      };
+      broadcast({ type: "escalation", escalation: state.escalation });
+    }
+    console.log(`[sprint] Validation ${statusLabel}${details ? `: ${details}` : ""}`);
+  }).catch((err: Error) => {
+    console.error("[sprint] Validation error:", err.message);
+  });
 }
 
 const STALE_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 hours

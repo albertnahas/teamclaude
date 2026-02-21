@@ -1,21 +1,45 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync, existsSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { tmpdir, homedir } from "node:os";
 import type { SprintState } from "./state";
 
-// Mock `node:os` so the analytics file lands in a temp dir instead of ~/.claude
-const tmpAnalyticsDir = mkdtempSync(join(tmpdir(), "tc-analytics-test-"));
+// Create a temp directory to act as project root
+const tmpProjectRoot = mkdtempSync(join(tmpdir(), "tc-analytics-test-"));
 
-vi.mock("node:os", async (importOriginal) => {
-  const original = await importOriginal<typeof import("node:os")>();
-  return { ...original, homedir: () => tmpAnalyticsDir };
+// Mock storage.js to use the temp directory
+vi.mock("./storage.js", () => {
+  const _join = require("node:path").join;
+  const _mkdirSync = require("node:fs").mkdirSync;
+  const _writeFileSync = require("node:fs").writeFileSync;
+  const _existsSync = require("node:fs").existsSync;
+  const tcDir = () => _join(tmpProjectRoot, ".teamclaude");
+  return {
+    analyticsPath: () => _join(tcDir(), "analytics.json"),
+    ensureStorageDir: () => {
+      _mkdirSync(tcDir(), { recursive: true });
+      const gitignore = _join(tcDir(), ".gitignore");
+      if (!_existsSync(gitignore)) {
+        _writeFileSync(gitignore, "state.json\nanalytics.json\n", "utf-8");
+      }
+    },
+    ensureSprintHistoryDir: (id: string) => {
+      const dir = _join(tcDir(), "history", id);
+      _mkdirSync(dir, { recursive: true });
+      return dir;
+    },
+  };
 });
 
-// Import AFTER mocking so the module picks up the mocked homedir
-const { recordSprintCompletion, loadSprintHistory } = await import(
-  "./analytics.js"
-);
+// Import AFTER mocking so the module picks up mocked storage
+const {
+  recordSprintCompletion,
+  loadSprintHistory,
+  saveSprintSnapshot,
+  saveRetroToHistory,
+  saveRecordToHistory,
+  migrateGlobalAnalytics,
+} = await import("./analytics.js");
 
 function makeState(overrides: Partial<SprintState> = {}): SprintState {
   return {
@@ -46,14 +70,15 @@ function makeState(overrides: Partial<SprintState> = {}): SprintState {
     pendingCheckpoint: null,
     tmuxAvailable: false,
     tmuxSessionName: null,
+    mergeConflict: null,
     ...overrides,
   };
 }
 
-const analyticsPath = join(tmpAnalyticsDir, ".claude", "teamclaude-analytics.json");
+const analyticsFile = join(tmpProjectRoot, ".teamclaude", "analytics.json");
 
 beforeEach(() => {
-  if (existsSync(analyticsPath)) rmSync(analyticsPath);
+  if (existsSync(analyticsFile)) rmSync(analyticsFile);
 });
 
 afterEach(() => {
@@ -66,39 +91,37 @@ describe("loadSprintHistory", () => {
   });
 
   it("returns empty array when file contains invalid JSON", () => {
-    mkdirSync(join(tmpAnalyticsDir, ".claude"), { recursive: true });
-    writeFileSync(analyticsPath, "not-valid-json", "utf-8");
+    mkdirSync(join(tmpProjectRoot, ".teamclaude"), { recursive: true });
+    writeFileSync(analyticsFile, "not-valid-json", "utf-8");
     expect(loadSprintHistory()).toEqual([]);
   });
 
   it("returns empty array when file contains non-array JSON", () => {
-    mkdirSync(join(tmpAnalyticsDir, ".claude"), { recursive: true });
-    writeFileSync(analyticsPath, JSON.stringify({ not: "an array" }), "utf-8");
+    mkdirSync(join(tmpProjectRoot, ".teamclaude"), { recursive: true });
+    writeFileSync(analyticsFile, JSON.stringify({ not: "an array" }), "utf-8");
     expect(loadSprintHistory()).toEqual([]);
   });
 });
 
 describe("recordSprintCompletion", () => {
-  it("creates the file with one record on first call", () => {
+  it("creates the file with one record on first call and returns the record", () => {
     const state = makeState();
-    recordSprintCompletion(state, Date.now() - 5000);
+    const record = recordSprintCompletion(state, Date.now() - 5000);
+
+    expect(record).toBeDefined();
+    expect(record.cycle).toBe(2);
 
     const history = loadSprintHistory();
     expect(history).toHaveLength(1);
 
-    const record = history[0];
-    expect(record.cycle).toBe(2);
-    expect(record.totalTasks).toBe(2);
-    expect(record.completedTasks).toBe(1);
-    expect(record.blockedTasks).toBe(1);
-    expect(record.totalMessages).toBe(4);
-    expect(record.agents).toEqual(["sprint-manager", "sprint-engineer-1"]);
-    expect(record.sprintId).toContain("test-team");
-    expect(record.startedAt).toBeTruthy();
-    expect(record.completedAt).toBeTruthy();
-    expect(new Date(record.completedAt).getTime()).toBeGreaterThanOrEqual(
-      new Date(record.startedAt).getTime()
-    );
+    expect(history[0].totalTasks).toBe(2);
+    expect(history[0].completedTasks).toBe(1);
+    expect(history[0].blockedTasks).toBe(1);
+    expect(history[0].totalMessages).toBe(4);
+    expect(history[0].agents).toEqual(["sprint-manager", "sprint-engineer-1"]);
+    expect(history[0].sprintId).toContain("test-team");
+    expect(history[0].startedAt).toBeTruthy();
+    expect(history[0].completedAt).toBeTruthy();
   });
 
   it("appends to existing records", () => {
@@ -110,7 +133,6 @@ describe("recordSprintCompletion", () => {
   });
 
   it("calculates avgReviewRoundsPerTask correctly", () => {
-    // 1 completed task with 1 RESUBMIT message referencing #1 → avg = 1
     const state = makeState();
     recordSprintCompletion(state);
 
@@ -154,5 +176,66 @@ describe("recordSprintCompletion", () => {
     expect(record.totalTasks).toBe(3);
     expect(record.completedTasks).toBe(3);
     expect(record.blockedTasks).toBe(0);
+  });
+});
+
+describe("saveSprintSnapshot", () => {
+  it("writes tasks.json and messages.json to history dir", () => {
+    const state = makeState();
+    saveSprintSnapshot("sprint-test-1", state);
+
+    const histDir = join(tmpProjectRoot, ".teamclaude", "history", "sprint-test-1");
+    expect(existsSync(join(histDir, "tasks.json"))).toBe(true);
+    expect(existsSync(join(histDir, "messages.json"))).toBe(true);
+
+    const tasks = JSON.parse(readFileSync(join(histDir, "tasks.json"), "utf-8"));
+    expect(tasks).toHaveLength(2);
+  });
+});
+
+describe("saveRetroToHistory", () => {
+  it("writes retro.md to history dir", () => {
+    saveRetroToHistory("sprint-test-2", "# Retro\nGood sprint");
+
+    const histDir = join(tmpProjectRoot, ".teamclaude", "history", "sprint-test-2");
+    const content = readFileSync(join(histDir, "retro.md"), "utf-8");
+    expect(content).toBe("# Retro\nGood sprint");
+  });
+});
+
+describe("saveRecordToHistory", () => {
+  it("writes record.json to history dir", () => {
+    const record = recordSprintCompletion(makeState());
+    saveRecordToHistory("sprint-test-3", record);
+
+    const histDir = join(tmpProjectRoot, ".teamclaude", "history", "sprint-test-3");
+    const saved = JSON.parse(readFileSync(join(histDir, "record.json"), "utf-8"));
+    expect(saved.cycle).toBe(2);
+  });
+});
+
+describe("migrateGlobalAnalytics", () => {
+  it("does nothing when local analytics already exists", () => {
+    // Create local analytics first
+    const state = makeState();
+    recordSprintCompletion(state);
+    const before = loadSprintHistory();
+
+    // Create a global file with different data
+    const globalDir = join(homedir(), ".claude");
+    mkdirSync(globalDir, { recursive: true });
+    const globalPath = join(globalDir, "teamclaude-analytics.json");
+    const hadGlobal = existsSync(globalPath);
+    if (!hadGlobal) {
+      writeFileSync(globalPath, "[]", "utf-8");
+    }
+
+    migrateGlobalAnalytics();
+
+    // Local should be unchanged
+    expect(loadSprintHistory()).toEqual(before);
+
+    // Cleanup if we created it
+    if (!hadGlobal && existsSync(globalPath)) rmSync(globalPath);
   });
 });

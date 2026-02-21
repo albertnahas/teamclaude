@@ -2,14 +2,30 @@
 # Place this file in your project root. Auto-detection is the default.
 
 verification:
-  # Commands to verify code quality. Detected automatically from lockfile + package.json.
+  # Commands to verify code quality. Runs automatically when sprint reaches the
+  # "validating" phase (on SPRINT_COMPLETE and CYCLE_COMPLETE).
+  #
+  # If omitted, auto-detected from your project:
+  #   Node.js: package.json scripts (test, type-check, lint) + lockfile runner
+  #   Python:  pytest, mypy, ruff (from pyproject.toml)
+  #   Rust:    cargo check, cargo test, cargo clippy
+  #   Go:      go test ./..., go vet ./...
+  #
   # type_check: "pnpm type-check"
   # test: "pnpm test --run"
+  # lint: "pnpm run lint"
 
 agents:
   # Default model for all sprint agents (haiku | sonnet | opus)
   # Also determines token cost estimates in the dashboard
   model: sonnet
+
+models:
+  # Per-task model overrides — takes precedence over automatic complexity routing.
+  # Key is the task ID (string), value is the full model ID.
+  overrides:
+    # "1": claude-opus-4-6
+    # "3": claude-haiku-4-5-20251001
 
 sprint:
   # Maximum review rounds before escalating a task

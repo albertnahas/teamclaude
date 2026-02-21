@@ -4,19 +4,24 @@ import {
   type ServerResponse,
 } from "node:http";
 import { spawn, type ChildProcess } from "node:child_process";
-import { readFile, readFileSync, existsSync } from "node:fs";
+import { readFile, readFileSync, existsSync, readdirSync } from "node:fs";
 import { join, dirname as pathDirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { WebSocketServer } from "ws";
 
+import { setProjectRoot, generateSprintId, historyDir } from "./storage.js";
 import { state, clients, broadcast, resetState, detectProjectName } from "./state.js";
 import { loadPersistedState, flushSave } from "./persistence.js";
 import { startWatching, setTeamDiscoveredHook } from "./watcher.js";
 import { compileSprintPrompt } from "./prompt.js";
-import { recordSprintCompletion, loadSprintHistory } from "./analytics.js";
+import { recordSprintCompletion, loadSprintHistory, saveSprintSnapshot, saveRetroToHistory, saveRecordToHistory, migrateGlobalAnalytics } from "./analytics.js";
 import { createSprintBranch, generatePRSummary, getCurrentBranch } from "./git.js";
+import { loadLearnings, getRecentLearnings, appendLearnings } from "./learnings.js";
+import { analyzeSprintTasks, buildExecutionPlan, inferDependencies, applyInferredDependencies } from "./planner.js";
+import { routeTaskToModel, loadModelOverrides } from "./model-router.js";
 import { generateRetro } from "./retro.js";
+import { loadTemplates } from "./templates.js";
 import * as tmux from "./tmux.js";
 
 // --- CLI flags ---
@@ -204,7 +209,8 @@ function handleLaunch(
         roadmap || "",
         engineers,
         includePM,
-        cycles
+        cycles,
+        getRecentLearnings(3)
       );
 
       const startedAt = Date.now();
@@ -328,10 +334,21 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
       stopPanePolling();
       tmux.reset();
     }
-    if (wasRunning) recordSprintCompletion(state, startedAt);
+    let record: ReturnType<typeof recordSprintCompletion> | null = null;
+    if (wasRunning) record = recordSprintCompletion(state, startedAt);
     const stateCopy = { ...state, tasks: [...state.tasks], messages: [...state.messages], agents: [...state.agents] };
     const history = loadSprintHistory();
     lastRetro = generateRetro(stateCopy, history);
+
+    // Save sprint history snapshot
+    if (record) {
+      const sprintId = generateSprintId();
+      saveSprintSnapshot(sprintId, stateCopy);
+      saveRetroToHistory(sprintId, lastRetro);
+      saveRecordToHistory(sprintId, record);
+      appendLearnings(stateCopy, record, lastRetro);
+    }
+
     const branchAtStop = sprintBranch;
     sprintBranch = null;
     const tmuxWasAvailable = state.tmuxAvailable;
@@ -339,7 +356,7 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
     state.projectName = detectProjectName();
     state.tmuxAvailable = tmuxWasAvailable;
     broadcast({ type: "init", state });
-    generatePRSummary(stateCopy, process.cwd()).then((prSummary) => {
+    generatePRSummary(stateCopy, process.cwd()).catch(() => "").then((prSummary) => {
       res.writeHead(200, { "Content-Type": "application/json", ...cors });
       res.end(JSON.stringify({ ok: true, prSummary, retro: lastRetro, branch: branchAtStop }));
     });
@@ -351,6 +368,28 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
       res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", ...cors });
       res.end(lastRetro);
     }
+  } else if (req.url === "/api/plan" && req.method === "GET") {
+    const inferred = inferDependencies(state.tasks);
+    const tasksWithDeps = applyInferredDependencies(state.tasks, inferred);
+    const sprintPlan = analyzeSprintTasks(tasksWithDeps);
+    const executionPlan = buildExecutionPlan(tasksWithDeps);
+    const overrides = loadModelOverrides(join(process.cwd(), ".sprint.yml"));
+    const modelRouting = Object.fromEntries(
+      tasksWithDeps.map((t) => [t.id, routeTaskToModel(t, overrides)])
+    );
+    res.writeHead(200, { "Content-Type": "application/json", ...cors });
+    res.end(JSON.stringify({ sprintPlan, executionPlan, modelRouting }));
+  } else if (req.url === "/api/plan/approve" && req.method === "POST") {
+    // Approval is recorded as a no-op flag for now; launch is handled separately
+    res.writeHead(200, { "Content-Type": "application/json", ...cors });
+    res.end(JSON.stringify({ ok: true }));
+  } else if (req.url === "/api/task-models" && req.method === "GET") {
+    const overrides = loadModelOverrides(join(process.cwd(), ".sprint.yml"));
+    const taskModels = Object.fromEntries(
+      state.tasks.map((t) => [t.id, routeTaskToModel(t, overrides)])
+    );
+    res.writeHead(200, { "Content-Type": "application/json", ...cors });
+    res.end(JSON.stringify(taskModels));
   } else if (req.url === "/api/git-status" && req.method === "GET") {
     getCurrentBranch(process.cwd()).then((branch) => {
       res.writeHead(200, { "Content-Type": "application/json", ...cors });
@@ -385,6 +424,14 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
     broadcast({ type: "escalation", escalation: null });
     res.writeHead(200, { "Content-Type": "application/json", ...cors });
     res.end(JSON.stringify({ ok: true }));
+  } else if (
+    req.url === "/api/dismiss-merge-conflict" &&
+    req.method === "POST"
+  ) {
+    state.mergeConflict = null;
+    broadcast({ type: "merge_conflict", mergeConflict: null });
+    res.writeHead(200, { "Content-Type": "application/json", ...cors });
+    res.end(JSON.stringify({ ok: true }));
   } else if (req.url === "/api/checkpoint" && req.method === "POST") {
     let body = "";
     req.on("data", (chunk: Buffer) => (body += chunk));
@@ -406,6 +453,45 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
     broadcast({ type: "checkpoint", checkpoint: null });
     res.writeHead(200, { "Content-Type": "application/json", ...cors });
     res.end(JSON.stringify({ ok: true }));
+  } else if (req.url === "/api/templates" && req.method === "GET") {
+    const templates = loadTemplates();
+    res.writeHead(200, { "Content-Type": "application/json", ...cors });
+    res.end(JSON.stringify(templates));
+  } else if (req.url === "/api/history" && req.method === "GET") {
+    try {
+      const dir = historyDir();
+      const entries = existsSync(dir)
+        ? readdirSync(dir, { withFileTypes: true })
+            .filter((d) => d.isDirectory() && d.name.startsWith("sprint-"))
+            .map((d) => {
+              const recordPath = join(dir, d.name, "record.json");
+              let record = null;
+              if (existsSync(recordPath)) {
+                try { record = JSON.parse(readFileSync(recordPath, "utf-8")); } catch {}
+              }
+              return { id: d.name, record };
+            })
+            .sort((a, b) => a.id.localeCompare(b.id))
+        : [];
+      res.writeHead(200, { "Content-Type": "application/json", ...cors });
+      res.end(JSON.stringify(entries));
+    } catch {
+      res.writeHead(200, { "Content-Type": "application/json", ...cors });
+      res.end("[]");
+    }
+  } else if (req.url?.startsWith("/api/history/") && req.url.endsWith("/retro") && req.method === "GET") {
+    const id = req.url.slice("/api/history/".length, -"/retro".length);
+    const retroPath = join(historyDir(), id, "retro.md");
+    if (existsSync(retroPath)) {
+      res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", ...cors });
+      res.end(readFileSync(retroPath, "utf-8"));
+    } else {
+      res.writeHead(404, { "Content-Type": "text/plain", ...cors });
+      res.end("Not found");
+    }
+  } else if (req.url === "/api/learnings" && req.method === "GET") {
+    res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", ...cors });
+    res.end(loadLearnings());
   } else if (req.url === "/api/resume" && req.method === "POST") {
     if (state.teamName) {
       res.writeHead(409, { "Content-Type": "application/json", ...cors });
@@ -524,6 +610,9 @@ async function reconnectTmuxSession() {
     }
   }, 5000);
 }
+
+setProjectRoot(process.cwd());
+migrateGlobalAnalytics();
 
 state.projectName = detectProjectName();
 

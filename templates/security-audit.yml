@@ -1,0 +1,41 @@
+name: Security Audit
+description: Security agent scans the codebase for vulnerabilities; engineer remediates findings; rescan confirms closure.
+
+agents:
+  roles:
+    - engineer
+    - security-auditor
+  model: opus
+
+cycles: 1
+
+verification:
+  # type_check: "npm run type-check"
+  # test: "npm test --run"
+
+sprint:
+  max_review_rounds: 3
+
+roadmap: |
+  ## Security Audit Roadmap
+
+  ### 1. Scan
+  - [ ] Security auditor runs static analysis tools (e.g. npm audit, semgrep, snyk)
+  - [ ] Review authentication, authorisation, and input-validation paths
+  - [ ] Document all findings with severity and reproduction steps
+
+  ### 2. Prioritize
+  - [ ] Classify findings: Critical / High / Medium / Low / Informational
+  - [ ] Agree remediation order with manager (critical-first)
+  - [ ] Create a task per finding (or group related low-severity items)
+
+  ### 3. Fix
+  - [ ] Engineer remediates each finding per priority
+  - [ ] Add regression tests to prevent re-introduction
+  - [ ] Manager reviews each fix before marking resolved
+
+  ### 4. Rescan
+  - [ ] Security auditor re-runs all scan tools on the patched branch
+  - [ ] Confirm all Critical / High findings are closed
+  - [ ] Accepted risks documented with rationale
+  - [ ] Final report produced and archived

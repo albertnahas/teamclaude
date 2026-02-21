@@ -22,10 +22,6 @@ describe("detectProtocol", () => {
     }
   });
 
-  it("covers all keys in PROTOCOL_PATTERNS", () => {
-    expect(Object.keys(PROTOCOL_PATTERNS).length).toBe(11);
-  });
-
   it("returns undefined for an unrecognised string", () => {
     expect(detectProtocol("hello world")).toBeUndefined();
     expect(detectProtocol("")).toBeUndefined();

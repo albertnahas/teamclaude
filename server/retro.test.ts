@@ -34,6 +34,7 @@ function makeState(overrides: Partial<SprintState> = {}): SprintState {
     pendingCheckpoint: null,
     tmuxAvailable: false,
     tmuxSessionName: null,
+    mergeConflict: null,
     ...overrides,
   };
 }

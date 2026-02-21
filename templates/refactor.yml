@@ -1,0 +1,40 @@
+name: Refactor
+description: Manager scopes the refactoring; engineer executes; all tests must pass on completion.
+
+agents:
+  roles:
+    - engineer
+  model: sonnet
+
+cycles: 1
+
+verification:
+  # type_check: "npm run type-check"
+  # test: "npm test --run"
+
+sprint:
+  max_review_rounds: 3
+
+roadmap: |
+  ## Refactor Roadmap
+
+  ### 1. Analyze
+  - [ ] Identify modules / files in scope
+  - [ ] Document current behaviour and pain points
+  - [ ] Flag any external API contracts that must remain stable
+
+  ### 2. Plan
+  - [ ] Define target architecture / structure
+  - [ ] Break work into safe, incremental steps
+  - [ ] Agree on success criteria with manager
+
+  ### 3. Refactor
+  - [ ] Execute plan step by step
+  - [ ] Keep commits small and focused
+  - [ ] Update or add tests alongside each change
+
+  ### 4. Verify Tests Pass
+  - [ ] Run full type-check — zero errors
+  - [ ] Run full test suite — all tests pass
+  - [ ] Confirm no behaviour regressions
+  - [ ] Manager signs off on code quality
