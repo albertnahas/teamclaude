@@ -1,6 +1,6 @@
 {
   "name": "teamclaude",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Autonomous sprint plugin for Claude Code — real-time visualization of agent teams",
   "type": "module",
   "bin": {
@@ -13,6 +13,7 @@
     "agents",
     "commands",
     "skills",
+    "templates",
     "examples",
     ".claude-plugin",
     ".sprint.example.yml",
@@ -36,14 +37,23 @@
     "dev:unlink": "node scripts/dev-link.js unlink"
   },
   "devDependencies": {
-    "chokidar": "^4.0.3",
-    "ws": "^8.18.0",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^22.13.4",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "@types/ws": "^8.5.14",
+    "@vitejs/plugin-react": "^5.1.4",
+    "chokidar": "^4.0.3",
     "esbuild": "^0.25.0",
+    "happy-dom": "^20.7.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "tsx": "^4.19.3",
     "typescript": "^5.7.3",
-    "vitest": "^3.0.5"
+    "vite": "^7.3.1",
+    "vitest": "^3.0.5",
+    "ws": "^8.18.0"
   },
   "keywords": [
     "claude",
@@ -58,9 +68,9 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/albertonahas/teamclaude.git"
+    "url": "git+https://github.com/albertnahas/teamclaude.git"
   },
-  "homepage": "https://github.com/albertonahas/teamclaude#readme",
+  "homepage": "https://github.com/albertnahas/teamclaude#readme",
   "engines": {
     "node": ">=18"
   }

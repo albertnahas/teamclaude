@@ -1,10 +1,54 @@
-# TeamClaude
+<p align="center">
+  <img src="assets/logo-512.png" alt="TeamClaude" width="120" />
+</p>
+
+<h1 align="center">TeamClaude</h1>
 
 [![npm version](https://img.shields.io/npm/v/teamclaude)](https://www.npmjs.com/package/teamclaude)
-[![CI](https://github.com/albertonahas/teamclaude/actions/workflows/ci.yml/badge.svg)](https://github.com/albertonahas/teamclaude/actions/workflows/ci.yml)
+[![CI](https://github.com/albertnahas/teamclaude/actions/workflows/ci.yml/badge.svg)](https://github.com/albertnahas/teamclaude/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Autonomous sprint plugin for Claude Code. Orchestrates manager + engineer agent teams with a real-time visualization dashboard.
+
+## Prerequisites
+
+### 1. Enable Agent Teams in Claude Code
+
+Agent Teams is an **experimental feature** that must be enabled before use. Add to your `~/.claude/settings.json`:
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  }
+}
+```
+
+Or set the environment variable in your shell:
+
+```bash
+export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+```
+
+> See the [official Agent Teams documentation](https://code.claude.com/docs/en/agent-teams) for full details.
+
+### 2. Install tmux (recommended)
+
+tmux enables live terminal views of each agent in the dashboard. Without it, agents run as background processes and terminal features are hidden.
+
+```bash
+# macOS
+brew install tmux
+
+# Ubuntu / Debian
+sudo apt install tmux
+```
+
+### 3. Node.js 18+
+
+```bash
+node --version   # Must be >= 18
+```
 
 ## Install
 

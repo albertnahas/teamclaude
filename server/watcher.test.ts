@@ -31,6 +31,7 @@ vi.mock("./state.js", () => {
     cycle: 0,
     phase: "idle" as string,
     reviewTaskIds: [] as string[],
+    validatingTaskIds: [] as string[],
     tokenUsage: { total: 0, byAgent: {} as Record<string, number>, estimatedCostUsd: 0 },
     checkpoints: [] as string[],
     pendingCheckpoint: null as any,
@@ -83,6 +84,7 @@ function resetState() {
   state.cycle = 0;
   state.phase = "idle";
   state.reviewTaskIds = [];
+  state.validatingTaskIds = [];
   state.tokenUsage = { total: 0, byAgent: {}, estimatedCostUsd: 0 };
   state.checkpoints = [];
   state.pendingCheckpoint = null;
@@ -464,14 +466,15 @@ describe("handleInboxMessage", () => {
     expect(state.reviewTaskIds).toContain("3");
   });
 
-  it("APPROVED — sets task to completed and removes from reviewTaskIds", () => {
+  it("APPROVED — starts validation gate (task stays in_progress, added to validatingTaskIds)", () => {
     state.tasks = [{ id: "4", subject: "Approve me", status: "in_progress", owner: "sprint-engineer-1", blockedBy: [] }];
     state.reviewTaskIds = ["4"];
     vi.mocked(safeReadJSON).mockReturnValue([
       { from: "sprint-manager", content: "APPROVED: #4" },
     ]);
     handleInboxMessage(inboxPath);
-    expect(state.tasks[0].status).toBe("completed");
+    expect(state.tasks[0].status).toBe("in_progress"); // stays in_progress while validating
+    expect(state.validatingTaskIds).toContain("4");
     expect(state.reviewTaskIds).not.toContain("4");
   });
 
@@ -485,6 +488,35 @@ describe("handleInboxMessage", () => {
     handleInboxMessage(inboxPath);
     expect(state.tasks[0].status).toBe("in_progress");
     expect(state.reviewTaskIds).not.toContain("5");
+  });
+
+  it("READY_FOR_REVIEW — deduplicates when task already in reviewTaskIds", () => {
+    state.tasks = [{ id: "3", subject: "Review me", status: "in_progress", owner: "sprint-engineer-1", blockedBy: [] }];
+    state.reviewTaskIds = ["3"]; // already in review
+    vi.mocked(safeReadJSON).mockReturnValue([
+      { from: "sprint-engineer-1", content: "READY_FOR_REVIEW: #3 — done again" },
+    ]);
+    handleInboxMessage("/home/user/.claude/teams/sprint-abc/inboxes/sprint-manager.json");
+    // Message is still recorded
+    expect(state.messages).toHaveLength(1);
+    // But reviewTaskIds is not duplicated
+    expect(state.reviewTaskIds.filter((id: string) => id === "3")).toHaveLength(1);
+    // No checkpoint or other side effects
+    expect(state.pendingCheckpoint).toBeNull();
+  });
+
+  it("APPROVED — completes task after successful validation", async () => {
+    state.tasks = [{ id: "10", subject: "Validate me", status: "in_progress", owner: "sprint-engineer-1", blockedBy: [] }];
+    state.reviewTaskIds = ["10"];
+    vi.mocked(safeReadJSON).mockReturnValue([
+      { from: "sprint-manager", content: "APPROVED: #10" },
+    ]);
+    handleInboxMessage(inboxPath);
+    // Wait for async validation to complete
+    await vi.waitFor(() => {
+      expect(state.validatingTaskIds).not.toContain("10");
+    });
+    expect(state.tasks[0].status).toBe("completed");
   });
 
   it("ESCALATE — sets escalation on state", () => {

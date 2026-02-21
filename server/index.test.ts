@@ -203,6 +203,16 @@ vi.mock("./notifications.js", () => ({
   notifyWebhook: vi.fn(),
 }));
 
+vi.mock("./plugin-loader.js", () => ({
+  loadPlugins: vi.fn(() => Promise.resolve()),
+  getPlugins: vi.fn(() => []),
+  loadPluginPaths: vi.fn(() => []),
+  fireOnSprintStart: vi.fn(),
+  fireOnSprintStop: vi.fn(),
+  fireOnTaskComplete: vi.fn(),
+  fireOnEscalation: vi.fn(),
+}));
+
 vi.mock("ws", () => ({
   WebSocketServer: class {
     on() { return this; }

@@ -30,6 +30,7 @@ const baseState: SprintState = {
   cycle: 1,
   phase: "sprinting",
   reviewTaskIds: [],
+  validatingTaskIds: [],
   tokenUsage: { total: 0, byAgent: {}, estimatedCostUsd: 0 },
   checkpoints: [],
   pendingCheckpoint: null,

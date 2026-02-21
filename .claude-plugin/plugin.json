@@ -1,6 +1,6 @@
 {
   "name": "teamclaude",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Autonomous sprint plugin — real-time visualization of Claude Code agent teams",
   "author": {
     "name": "Albert Nahas"
