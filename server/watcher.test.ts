@@ -157,11 +157,11 @@ describe("handleTeamConfig", () => {
     });
   });
 
-  it("sets mode to manual when no sprint-pm present", () => {
+  it("sets mode to manual and phase to sprinting when no sprint-pm present", () => {
     vi.mocked(safeReadJSON).mockReturnValue(validConfig);
     handleTeamConfig(filePath);
     expect(state.mode).toBe("manual");
-    expect(state.phase).toBe("idle");
+    expect(state.phase).toBe("sprinting");
   });
 
   it("sets mode to autonomous and phase to analyzing when sprint-pm present", () => {

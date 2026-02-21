@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
 import type { SprintState, ModelRoutingDecision } from "../types";
+import { RetroExport } from "./RetroExport";
 import { MODEL_COST } from "../types";
 
 interface SprintRecord {
@@ -95,6 +96,7 @@ function HistoryTable({ records }: { records: SprintRecord[] }) {
                             ))
                           : "—"}
                       </div>
+                      <RetroExport retroAvailable sprintId={r.sprintId} />
                     </div>
                   </td>
                 </tr>

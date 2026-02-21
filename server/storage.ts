@@ -28,6 +28,10 @@ export function learningsPath(): string {
   return join(tcDir(), "learnings.md");
 }
 
+export function processLearningsPath(): string {
+  return join(tcDir(), "learnings.json");
+}
+
 export function historyDir(): string {
   return join(tcDir(), "history");
 }
@@ -44,7 +48,7 @@ export function ensureStorageDir() {
   mkdirSync(dir, { recursive: true });
   const gitignorePath = join(dir, ".gitignore");
   if (!existsSync(gitignorePath)) {
-    writeFileSync(gitignorePath, "state.json\nanalytics.json\n", "utf-8");
+    writeFileSync(gitignorePath, "state.json\nanalytics.json\nlearnings.json\n", "utf-8");
   }
   storageEnsured = true;
 }

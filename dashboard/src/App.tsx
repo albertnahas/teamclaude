@@ -238,7 +238,7 @@ export default function App() {
 
       <div className="container">
         <div className="panel agents-panel" style={{ overflow: "hidden" }}>
-          {openTerminalAgent && sprintState.tmuxAvailable ? (
+          {openTerminalAgent && sprintState.tmuxSessionName ? (
             <TerminalView
               agentName={openTerminalAgent}
               lines={terminalState.lines}
@@ -251,7 +251,7 @@ export default function App() {
               agents={sprintState.agents}
               tokenUsage={sprintState.tokenUsage}
               tmuxAvailable={sprintState.tmuxAvailable}
-              onAgentClick={sprintState.tmuxAvailable ? setOpenTerminalAgent : undefined}
+              onAgentClick={sprintState.tmuxSessionName ? setOpenTerminalAgent : undefined}
             />
           )}
         </div>

@@ -1,3 +1,5 @@
+import { RetroExport } from "./RetroExport";
+
 interface RetroData {
   branch?: string;
   retro?: string;
@@ -22,6 +24,7 @@ export function RetroModal({ data, onClose }: RetroModalProps) {
             <pre className="retro-pr">{data.prSummary}</pre>
           </div>
         )}
+        <RetroExport retroAvailable={!!data.retro} />
         <div className="checkpoint-modal-actions">
           <button className="checkpoint-approve-btn" onClick={onClose}>
             Close

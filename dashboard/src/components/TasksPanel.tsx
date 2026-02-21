@@ -117,12 +117,15 @@ function TaskRow({
   task,
   isReview,
   decision,
+  completedIds,
 }: {
   task: TaskInfo;
   isReview: boolean;
   decision?: ModelRoutingDecision;
+  completedIds: Set<string>;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const unresolvedBlockers = task.blockedBy.filter((id) => !completedIds.has(id));
 
   return (
     <div
@@ -135,7 +138,7 @@ function TaskRow({
         style={{ background: isReview ? "var(--blue)" : STATUS_COLORS[task.status] }}
       />
       <span className="task-subject">{task.subject}</span>
-      {task.blockedBy.length > 0 && (
+      {unresolvedBlockers.length > 0 && (
         <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--red)" }}>
           blocked
         </span>
@@ -154,10 +157,12 @@ function KanbanCard({
   task,
   isReview,
   decision,
+  completedIds,
 }: {
   task: TaskInfo;
   isReview: boolean;
   decision?: ModelRoutingDecision;
+  completedIds: Set<string>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const colClass = isReview
@@ -169,15 +174,16 @@ function KanbanCard({
         : task.status === "completed"
           ? "col-done"
           : "";
+  const unresolvedBlockers = task.blockedBy.filter((id) => !completedIds.has(id));
 
   return (
     <div
-      className={`kanban-card ${colClass} ${expanded ? "expanded" : ""} ${task.blockedBy.length ? "blocked" : ""}`}
+      className={`kanban-card ${colClass} ${expanded ? "expanded" : ""} ${unresolvedBlockers.length ? "blocked" : ""}`}
       onClick={() => setExpanded((e) => !e)}
     >
       <div className="card-top">
         <span className="card-id">#{task.id}</span>
-        {task.blockedBy.length > 0 && <span className="card-blocked">blocked</span>}
+        {unresolvedBlockers.length > 0 && <span className="card-blocked">blocked</span>}
         {decision && <ModelBadge decision={decision} />}
       </div>
       <div className="card-subject">{task.subject}</div>
@@ -194,7 +200,8 @@ export function TasksPanel({ tasks, reviewTaskIds }: TasksPanelProps) {
   const [taskModels, setTaskModels] = useState<Record<string, ModelRoutingDecision>>({});
   const reviewSet = new Set(reviewTaskIds);
   const visible = tasks.filter((t) => t.status !== "deleted");
-  const done = visible.filter((t) => t.status === "completed").length;
+  const completedIds = new Set(visible.filter((t) => t.status === "completed").map((t) => t.id));
+  const done = completedIds.size;
 
   useEffect(() => {
     if (tasks.length === 0) return;
@@ -233,6 +240,7 @@ export function TasksPanel({ tasks, reviewTaskIds }: TasksPanelProps) {
                   task={task}
                   isReview={reviewSet.has(task.id)}
                   decision={taskModels[task.id]}
+                  completedIds={completedIds}
                 />
               ))
             )}
@@ -258,6 +266,7 @@ export function TasksPanel({ tasks, reviewTaskIds }: TasksPanelProps) {
                         task={task}
                         isReview={reviewSet.has(task.id)}
                         decision={taskModels[task.id]}
+                        completedIds={completedIds}
                       />
                     ))}
                   </div>

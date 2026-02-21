@@ -10,6 +10,7 @@ export const PROTOCOL_PATTERNS: Record<string, RegExp> = {
   CYCLE_COMPLETE: /^CYCLE_COMPLETE:/,
   ACCEPTANCE: /^ACCEPTANCE:/,
   NEXT_CYCLE: /^NEXT_CYCLE:/,
+  PROCESS_LEARNING: /^PROCESS_LEARNING:/,
 };
 
 export function detectProtocol(content: string): string | undefined {

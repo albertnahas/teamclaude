@@ -1,9 +1,30 @@
+import type { RoleLearnings } from "./learnings.js";
+
+function learningsSection(label: string, content: string): string {
+  if (!content) return "";
+  return `\n\nProcess learnings from past sprints — ${label}:\n${content}`;
+}
+
+function hasAnyLearnings(learnings?: RoleLearnings): boolean {
+  if (!learnings) return false;
+  return !!(learnings.orchestrator || learnings.pm || learnings.manager || learnings.engineer);
+}
+
+const REFLECTION_INSTRUCTION = `
+Before sending SPRINT_COMPLETE, reflect on the sprint process. For each process improvement you identify, send:
+  PROCESS_LEARNING: <role> — <actionable improvement>
+where role is pm, manager, or engineer. Focus on meta-process, not technical details. Max 3 learnings.
+Examples:
+  PROCESS_LEARNING: pm — Task descriptions lacked file paths, causing engineers to waste time searching
+  PROCESS_LEARNING: engineer — Code was submitted without running the type checker
+  PROCESS_LEARNING: manager — I approved too quickly without verifying test output`;
+
 export function compileSprintPrompt(
   roadmap: string,
   engineers: number,
   includePM: boolean,
   cycles: number,
-  learnings?: string
+  learnings?: RoleLearnings
 ): string {
   const teamName = `sprint-${Date.now()}`;
   const autoEngineers = engineers === 0;
@@ -15,12 +36,10 @@ IMPORTANT: You must do ALL work yourself. Do NOT spawn helper agents to create t
 First, call TeamCreate to create a team with team_name "${teamName}".
 `;
 
-  if (learnings) {
+  if (hasAnyLearnings(learnings) && learnings!.orchestrator) {
     prompt += `
-## Past Sprint Learnings
-Use these learnings from previous sprints to inform task planning and avoid repeating mistakes:
-
-${learnings}
+## Process Learnings
+${learnings!.orchestrator}
 `;
   }
 
@@ -30,7 +49,8 @@ ${learnings}
       ? ["sprint-engineer"]
       : Array.from({ length: engineers }, (_, i) => `sprint-engineer-${i + 1}`);
 
-  const pmPrompt = `You are the PM for team "${teamName}".${roadmap.trim() ? `\n\nUser guidance:\n${roadmap}` : ""}${learnings ? `\n\nPast sprint learnings (use to inform task planning):\n${learnings}` : ""}
+  const pmLearnings = learnings?.pm ? learningsSection("apply these improvements to task planning", learnings.pm) : "";
+  const pmPrompt = `You are the PM for team "${teamName}".${roadmap.trim() ? `\n\nUser guidance:\n${roadmap}` : ""}${pmLearnings}
 
 Your workflow:
 1. Analyze the codebase to understand existing patterns, architecture, and conventions
@@ -50,9 +70,10 @@ IMPORTANT: Each task description MUST include acceptance criteria. Example: "Don
   const distributionRule = engineerNames.length > 1
     ? `\nIMPORTANT: Distribute tasks evenly across ALL engineers using round-robin. Do NOT assign all tasks to one engineer.`
     : "";
+  const mgrLearnings = learnings?.manager ? learningsSection("apply these improvements to review and coordination", learnings.manager) : "";
 
   const mgrPromptAuto = `You are the Manager for team "${teamName}".
-${engineerList}
+${engineerList}${mgrLearnings}
 
 Your workflow:
 1. Wait for the PM's "ROADMAP_READY" message
@@ -67,10 +88,11 @@ Your workflow:
 6. When ALL tasks have status completed, send "SPRINT_COMPLETE" to team-lead
 ${distributionRule}
 CRITICAL: Use TaskUpdate for all status changes. Use TaskList to monitor progress.
-IMPORTANT: Only send APPROVED when you have verified the work is correct. REQUEST_CHANGES with specific feedback is better than approving broken code.`;
+IMPORTANT: Only send APPROVED when you have verified the work is correct. REQUEST_CHANGES with specific feedback is better than approving broken code.
+${REFLECTION_INSTRUCTION}`;
 
   const mgrPromptManual = `You are the Manager for team "${teamName}".
-${engineerList}
+${engineerList}${mgrLearnings}
 
 Your workflow:
 1. Call TaskList to see all created tasks
@@ -84,9 +106,11 @@ Your workflow:
 5. When ALL tasks have status completed, send "SPRINT_COMPLETE" to team-lead
 ${distributionRule}
 CRITICAL: Use TaskUpdate for all status changes. Use TaskList to monitor progress.
-IMPORTANT: Only send APPROVED when you have verified the work is correct. REQUEST_CHANGES with specific feedback is better than approving broken code.`;
+IMPORTANT: Only send APPROVED when you have verified the work is correct. REQUEST_CHANGES with specific feedback is better than approving broken code.
+${REFLECTION_INSTRUCTION}`;
 
-  const engPrompt = (name: string) => `You are engineer "${name}" for team "${teamName}".
+  const engLearnings = learnings?.engineer ? learningsSection("apply these improvements to implementation", learnings.engineer) : "";
+  const engPrompt = (name: string) => `You are engineer "${name}" for team "${teamName}".${engLearnings}
 
 Your workflow:
 1. Wait for "TASK_ASSIGNED: #id" messages from sprint-manager

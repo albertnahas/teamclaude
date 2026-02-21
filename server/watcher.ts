@@ -52,7 +52,7 @@ export function handleTeamConfig(filePath: string) {
     ? "autonomous"
     : "manual";
   state.cycle = 0;
-  state.phase = state.mode === "autonomous" ? "analyzing" : "idle";
+  state.phase = state.mode === "autonomous" ? "analyzing" : "sprinting";
 
   console.log(
     `[sprint] Tracking team: ${teamName} (${state.agents.length} agents, ${state.mode} mode)`
@@ -358,6 +358,13 @@ export function handleTaskFile(filePath: string) {
       state.reviewTaskIds = state.reviewTaskIds.filter(
         (id) => id !== task.id
       );
+      // Unblock tasks that depended on this one
+      for (const t of state.tasks) {
+        if (t.blockedBy.includes(task.id)) {
+          t.blockedBy = t.blockedBy.filter((id) => id !== task.id);
+          broadcast({ type: "task_updated", task: t });
+        }
+      }
     }
 
     broadcast({ type: "task_updated", task });

@@ -141,6 +141,10 @@ vi.mock("./learnings.js", () => ({
   loadLearnings: vi.fn(() => ""),
   getRecentLearnings: vi.fn(() => ""),
   appendLearnings: vi.fn(),
+  getRoleLearnings: vi.fn(() => ({ orchestrator: "", pm: "", manager: "", engineer: "" })),
+  extractProcessLearnings: vi.fn(() => ({ version: 1, learnings: [] })),
+  loadProcessLearnings: vi.fn(() => ({ version: 1, learnings: [] })),
+  saveAndRemoveLearning: vi.fn(() => true),
 }));
 
 vi.mock("./git.js", () => ({
@@ -151,6 +155,18 @@ vi.mock("./git.js", () => ({
 
 vi.mock("./retro.js", () => ({
   generateRetro: vi.fn(() => "Retro text"),
+  parseRetro: vi.fn(() => ({
+    summary: { totalTasks: 1, completedTasks: 1, completionRate: 100, avgReviewRounds: 0 },
+    completed: ["Task A"],
+    incomplete: [],
+    highlights: ["Task A"],
+    recommendations: [],
+    raw: "Retro text",
+  })),
+}));
+
+vi.mock("./gist.js", () => ({
+  createGist: vi.fn(() => Promise.resolve("https://gist.github.com/user/abc123")),
 }));
 
 vi.mock("./templates.js", () => ({
@@ -235,7 +251,8 @@ afterAll(() => {
 import { state, broadcast, resetState } from "./state.js";
 import { loadPersistedState } from "./persistence.js";
 import { recordSprintCompletion, loadSprintHistory, saveSprintSnapshot, saveRetroToHistory, saveRecordToHistory } from "./analytics.js";
-import { generateRetro } from "./retro.js";
+import { generateRetro, parseRetro } from "./retro.js";
+import { createGist } from "./gist.js";
 import { generatePRSummary, getCurrentBranch } from "./git.js";
 import { appendLearnings } from "./learnings.js";
 
@@ -592,6 +609,42 @@ describe("POST /api/launch", () => {
   });
 });
 
+describe("POST /api/retro/gist", () => {
+  it("returns 404 when no retro is available", async () => {
+    const { _resetLastRetro } = await import("./index.js");
+    _resetLastRetro();
+    const r = await json("POST", "/api/retro/gist");
+    expect(r.status).toBe(404);
+    expect(r.json).toMatchObject({ error: "No retrospective available" });
+  });
+
+  it("returns gist URL when retro exists", async () => {
+    vi.mocked(generateRetro).mockReturnValueOnce("# Sprint Retro\n\nGreat job!");
+    vi.mocked(generatePRSummary).mockResolvedValueOnce("");
+    await json("POST", "/api/stop");
+
+    vi.mocked(createGist).mockResolvedValueOnce("https://gist.github.com/user/abc123");
+    const r = await json("POST", "/api/retro/gist");
+    expect(r.status).toBe(200);
+    expect(r.json).toMatchObject({ url: "https://gist.github.com/user/abc123" });
+    expect(createGist).toHaveBeenCalledWith(
+      "# Sprint Retro\n\nGreat job!",
+      "sprint-retro.md"
+    );
+  });
+
+  it("returns 500 when gh CLI fails", async () => {
+    vi.mocked(generateRetro).mockReturnValueOnce("Some retro");
+    vi.mocked(generatePRSummary).mockResolvedValueOnce("");
+    await json("POST", "/api/stop");
+
+    vi.mocked(createGist).mockRejectedValueOnce(new Error("gh CLI is not installed"));
+    const r = await json("POST", "/api/retro/gist");
+    expect(r.status).toBe(500);
+    expect(r.json).toMatchObject({ error: "gh CLI is not installed" });
+  });
+});
+
 describe("GET /api/retro after stop", () => {
   it("returns retro text after a successful stop", async () => {
     vi.mocked(generateRetro).mockReturnValueOnce("Great sprint!");
@@ -600,6 +653,26 @@ describe("GET /api/retro after stop", () => {
     const r = await request("GET", "/api/retro");
     expect(r.status).toBe(200);
     expect(r.body).toBe("Great sprint!");
+    expect(r.headers["content-type"]).toMatch(/text\/plain/);
+  });
+
+  it("returns JSON when format=json", async () => {
+    vi.mocked(generateRetro).mockReturnValueOnce("# Retro\n\nContent");
+    vi.mocked(generatePRSummary).mockResolvedValueOnce("");
+    await json("POST", "/api/stop");
+    const r = await json("GET", "/api/retro?format=json");
+    expect(r.status).toBe(200);
+    expect(r.headers["content-type"]).toMatch(/application\/json/);
+    expect(r.json).toMatchObject({ summary: expect.any(Object), completed: expect.any(Array), raw: expect.any(String) });
+    expect(parseRetro).toHaveBeenCalled();
+  });
+
+  it("returns markdown for format=md", async () => {
+    vi.mocked(generateRetro).mockReturnValueOnce("# Retro\n\nContent");
+    vi.mocked(generatePRSummary).mockResolvedValueOnce("");
+    await json("POST", "/api/stop");
+    const r = await request("GET", "/api/retro?format=md");
+    expect(r.status).toBe(200);
     expect(r.headers["content-type"]).toMatch(/text\/plain/);
   });
 });

@@ -17,10 +17,13 @@ import { startWatching, setTeamDiscoveredHook } from "./watcher.js";
 import { compileSprintPrompt } from "./prompt.js";
 import { recordSprintCompletion, loadSprintHistory, saveSprintSnapshot, saveRetroToHistory, saveRecordToHistory, migrateGlobalAnalytics } from "./analytics.js";
 import { createSprintBranch, generatePRSummary, getCurrentBranch } from "./git.js";
-import { loadLearnings, getRecentLearnings, appendLearnings } from "./learnings.js";
+import { loadLearnings, getRecentLearnings, appendLearnings, getRoleLearnings, extractProcessLearnings, loadProcessLearnings, saveAndRemoveLearning } from "./learnings.js";
 import { analyzeSprintTasks, buildExecutionPlan, inferDependencies, applyInferredDependencies } from "./planner.js";
 import { routeTaskToModel, loadModelOverrides } from "./model-router.js";
-import { generateRetro } from "./retro.js";
+import { generateRetro, parseRetro } from "./retro.js";
+import { diffRetros } from "./retro-diff.js";
+import { generateVelocitySvg } from "./velocity.js";
+import { createGist } from "./gist.js";
 import { loadTemplates } from "./templates.js";
 import * as tmux from "./tmux.js";
 
@@ -70,6 +73,9 @@ let sprintBranch: string | null = null;
 let lastRetro: string | null = null;
 let panePollingInterval: ReturnType<typeof setInterval> | null = null;
 let tmuxSessionCheckInterval: ReturnType<typeof setInterval> | null = null;
+
+/** Reset lastRetro — for testing only */
+export function _resetLastRetro() { lastRetro = null; }
 
 // --- HTTP handlers ---
 
@@ -205,12 +211,13 @@ function handleLaunch(
         return;
       }
 
+      const roleLearnings = getRoleLearnings(5);
       const prompt = compileSprintPrompt(
         roadmap || "",
         engineers,
         includePM,
         cycles,
-        getRecentLearnings(3)
+        roleLearnings
       );
 
       const startedAt = Date.now();
@@ -294,7 +301,7 @@ function launchViaSpawn(
 function handleRequest(req: IncomingMessage, res: ServerResponse) {
   const cors: Record<string, string> = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
   };
 
@@ -322,7 +329,7 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
   } else if (req.url === "/api/launch" && req.method === "POST") {
     handleLaunch(req, res, cors);
   } else if (req.url === "/api/stop" && req.method === "POST") {
-    const wasRunning = !!sprintProcess || !!state.tmuxSessionName;
+    const wasRunning = !!sprintProcess || !!state.tmuxSessionName || !!state.teamName;
     const startedAt = sprintProcess?.startedAt ?? Date.now();
     if (sprintProcess) {
       sprintProcess.process.kill("SIGTERM");
@@ -347,6 +354,7 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
       saveRetroToHistory(sprintId, lastRetro);
       saveRecordToHistory(sprintId, record);
       appendLearnings(stateCopy, record, lastRetro);
+      extractProcessLearnings(stateCopy, record, sprintId);
     }
 
     const branchAtStop = sprintBranch;
@@ -360,14 +368,84 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
       res.writeHead(200, { "Content-Type": "application/json", ...cors });
       res.end(JSON.stringify({ ok: true, prSummary, retro: lastRetro, branch: branchAtStop }));
     });
-  } else if (req.url === "/api/retro" && req.method === "GET") {
+  } else if (req.url?.startsWith("/api/retro/diff") && req.method === "GET") {
+    const url = new URL(req.url, "http://localhost");
+    const idA = url.searchParams.get("a");
+    const idB = url.searchParams.get("b");
+    if (!idA || !idB) {
+      res.writeHead(400, { "Content-Type": "application/json", ...cors });
+      res.end(JSON.stringify({ error: "Query params 'a' and 'b' are required" }));
+    } else {
+      diffRetros(idA, idB).then((diff) => {
+        if (!diff) {
+          res.writeHead(404, { "Content-Type": "application/json", ...cors });
+          res.end(JSON.stringify({ error: "One or both sprint IDs not found" }));
+        } else {
+          res.writeHead(200, { "Content-Type": "application/json", ...cors });
+          res.end(JSON.stringify(diff));
+        }
+      }).catch(() => {
+        res.writeHead(500, { "Content-Type": "application/json", ...cors });
+        res.end(JSON.stringify({ error: "Failed to compute diff" }));
+      });
+    }
+  } else if (req.url?.startsWith("/api/retro") && req.url !== "/api/retro/gist" && req.method === "GET") {
     if (!lastRetro) {
       res.writeHead(404, { "Content-Type": "text/plain", ...cors });
       res.end("No retrospective available yet");
     } else {
-      res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", ...cors });
-      res.end(lastRetro);
+      const fmt = new URL(req.url, "http://localhost").searchParams.get("format");
+      if (fmt === "json") {
+        res.writeHead(200, { "Content-Type": "application/json", ...cors });
+        res.end(JSON.stringify(parseRetro(lastRetro)));
+      } else {
+        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", ...cors });
+        res.end(lastRetro);
+      }
     }
+  } else if (req.url === "/api/retro/gist" && req.method === "POST") {
+    let body = "";
+    req.on("data", (chunk: Buffer) => (body += chunk));
+    req.on("end", async () => {
+      let retroContent = lastRetro;
+
+      // Allow loading a historical retro by sprintId
+      if (!retroContent && body) {
+        try {
+          const { sprintId } = JSON.parse(body) as { sprintId?: string };
+          if (sprintId) {
+            const { readFile: readFileAsync } = await import("node:fs/promises");
+            const retroPath = join(historyDir(), sprintId, "retro.md");
+            retroContent = await readFileAsync(retroPath, "utf-8").catch(() => null);
+          }
+        } catch {}
+      }
+
+      if (!retroContent) {
+        res.writeHead(404, { "Content-Type": "application/json", ...cors });
+        res.end(JSON.stringify({ error: "No retrospective available" }));
+        return;
+      }
+
+      try {
+        const url = await createGist(retroContent, "sprint-retro.md");
+        res.writeHead(200, { "Content-Type": "application/json", ...cors });
+        res.end(JSON.stringify({ url }));
+      } catch (err: any) {
+        res.writeHead(500, { "Content-Type": "application/json", ...cors });
+        res.end(JSON.stringify({ error: err.message ?? "Failed to create gist" }));
+      }
+    });
+  } else if (req.url?.startsWith("/api/velocity.svg") && req.method === "GET") {
+    const url = new URL(req.url, "http://localhost");
+    const w = parseInt(url.searchParams.get("w") ?? "600", 10);
+    const h = parseInt(url.searchParams.get("h") ?? "200", 10);
+    const width = isNaN(w) || w < 100 ? 600 : Math.min(w, 2000);
+    const height = isNaN(h) || h < 60 ? 200 : Math.min(h, 1000);
+    const records = loadSprintHistory();
+    const svg = generateVelocitySvg(records, { width, height });
+    res.writeHead(200, { "Content-Type": "image/svg+xml", ...cors });
+    res.end(svg);
   } else if (req.url === "/api/plan" && req.method === "GET") {
     const inferred = inferDependencies(state.tasks);
     const tasksWithDeps = applyInferredDependencies(state.tasks, inferred);
@@ -479,12 +557,21 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
       res.writeHead(200, { "Content-Type": "application/json", ...cors });
       res.end("[]");
     }
-  } else if (req.url?.startsWith("/api/history/") && req.url.endsWith("/retro") && req.method === "GET") {
-    const id = req.url.slice("/api/history/".length, -"/retro".length);
+  } else if (req.url?.startsWith("/api/history/") && req.url.includes("/retro") && req.method === "GET") {
+    const parsedUrl = new URL(req.url, "http://localhost");
+    const pathParts = parsedUrl.pathname.slice("/api/history/".length);
+    const id = pathParts.slice(0, pathParts.lastIndexOf("/retro"));
     const retroPath = join(historyDir(), id, "retro.md");
     if (existsSync(retroPath)) {
-      res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", ...cors });
-      res.end(readFileSync(retroPath, "utf-8"));
+      const retroContent = readFileSync(retroPath, "utf-8");
+      const fmt = parsedUrl.searchParams.get("format");
+      if (fmt === "json") {
+        res.writeHead(200, { "Content-Type": "application/json", ...cors });
+        res.end(JSON.stringify(parseRetro(retroContent)));
+      } else {
+        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", ...cors });
+        res.end(retroContent);
+      }
     } else {
       res.writeHead(404, { "Content-Type": "text/plain", ...cors });
       res.end("Not found");
@@ -492,6 +579,19 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
   } else if (req.url === "/api/learnings" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", ...cors });
     res.end(loadLearnings());
+  } else if (req.url === "/api/process-learnings" && req.method === "GET") {
+    res.writeHead(200, { "Content-Type": "application/json", ...cors });
+    res.end(JSON.stringify(loadProcessLearnings()));
+  } else if (req.url?.startsWith("/api/process-learnings/") && req.method === "DELETE") {
+    const id = decodeURIComponent(req.url.slice("/api/process-learnings/".length));
+    const removed = saveAndRemoveLearning(id);
+    if (!removed) {
+      res.writeHead(404, { "Content-Type": "application/json", ...cors });
+      res.end(JSON.stringify({ error: "Not found" }));
+    } else {
+      res.writeHead(200, { "Content-Type": "application/json", ...cors });
+      res.end(JSON.stringify({ ok: true }));
+    }
   } else if (req.url === "/api/resume" && req.method === "POST") {
     if (state.teamName) {
       res.writeHead(409, { "Content-Type": "application/json", ...cors });

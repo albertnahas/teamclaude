@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { SprintState } from "./state";
 import type { SprintRecord } from "./analytics";
-import { generateRetro } from "./retro";
+import { generateRetro, parseRetro } from "./retro";
 
 function makeState(overrides: Partial<SprintState> = {}): SprintState {
   return {
@@ -186,5 +186,68 @@ describe("generateRetro", () => {
       expect(retro).toContain("No agent messages recorded");
       expect(retro).not.toContain("## Velocity Trend");
     });
+  });
+});
+
+describe("parseRetro", () => {
+  it("extracts summary stats from a generated retro", () => {
+    const retro = generateRetro(makeState(), []);
+    const parsed = parseRetro(retro);
+    expect(parsed.summary.totalTasks).toBe(3);
+    expect(parsed.summary.completedTasks).toBe(2);
+    expect(parsed.summary.completionRate).toBe(67);
+    expect(parsed.summary.avgReviewRounds).toBeGreaterThanOrEqual(0);
+  });
+
+  it("lists completed task subjects", () => {
+    const retro = generateRetro(makeState(), []);
+    const parsed = parseRetro(retro);
+    expect(parsed.completed).toContain("Build auth");
+    expect(parsed.completed).toContain("Fix bug");
+    expect(parsed.completed).not.toContain("Write docs");
+  });
+
+  it("lists incomplete task subjects", () => {
+    const retro = generateRetro(makeState(), []);
+    const parsed = parseRetro(retro);
+    expect(parsed.incomplete).toContain("Write docs");
+    expect(parsed.incomplete).not.toContain("Build auth");
+  });
+
+  it("sets highlights equal to completed tasks", () => {
+    const retro = generateRetro(makeState(), []);
+    const parsed = parseRetro(retro);
+    expect(parsed.highlights).toEqual(parsed.completed);
+  });
+
+  it("sets recommendations equal to incomplete tasks", () => {
+    const retro = generateRetro(makeState(), []);
+    const parsed = parseRetro(retro);
+    expect(parsed.recommendations).toEqual(parsed.incomplete);
+  });
+
+  it("preserves raw markdown", () => {
+    const retro = generateRetro(makeState(), []);
+    const parsed = parseRetro(retro);
+    expect(parsed.raw).toBe(retro);
+  });
+
+  it("returns zero stats for empty task list", () => {
+    const retro = generateRetro(makeState({ tasks: [], messages: [] }), []);
+    const parsed = parseRetro(retro);
+    expect(parsed.summary.totalTasks).toBe(0);
+    expect(parsed.summary.completedTasks).toBe(0);
+    expect(parsed.summary.completionRate).toBe(0);
+    expect(parsed.completed).toHaveLength(0);
+    expect(parsed.incomplete).toHaveLength(0);
+  });
+
+  it("returns zeros on arbitrary markdown with no matching patterns", () => {
+    const parsed = parseRetro("# Some other markdown\n\nNo retro data here.");
+    expect(parsed.summary.totalTasks).toBe(0);
+    expect(parsed.summary.completedTasks).toBe(0);
+    expect(parsed.completed).toHaveLength(0);
+    expect(parsed.incomplete).toHaveLength(0);
+    expect(parsed.raw).toBe("# Some other markdown\n\nNo retro data here.");
   });
 });

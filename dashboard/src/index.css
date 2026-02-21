@@ -1414,3 +1414,45 @@ body {
   transition: all 0.15s;
 }
 .theme-toggle:hover { border-color: var(--text-muted); color: var(--text-primary); }
+
+/* Retro Export Toolbar */
+.retro-export-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 10px 0 4px;
+}
+.retro-export-btn {
+  padding: 5px 12px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.retro-export-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+  color: var(--accent);
+}
+.retro-export-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.retro-export-btn--secondary {
+  border-color: var(--border-subtle);
+  color: var(--text-secondary);
+}
+.retro-export-toast {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  animation: fadeIn 0.15s ease;
+}
+.retro-export-toast--ok { background: rgba(34,197,94,0.15); color: #22c55e; }
+.retro-export-toast--err { background: rgba(239,68,68,0.15); color: #ef4444; }

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { compileSprintPrompt } from "./prompt";
+import type { RoleLearnings } from "./learnings";
 
 describe("compileSprintPrompt", () => {
   describe("manual mode — 1 engineer", () => {
@@ -120,29 +121,69 @@ describe("compileSprintPrompt", () => {
     });
   });
 
-  describe("learnings injection", () => {
-    it("includes learnings section when provided", () => {
-      const learnings = "## Sprint sprint-123\nCompleted: 3/5 tasks";
+  describe("role-based learnings injection", () => {
+    const learnings: RoleLearnings = {
+      orchestrator: "- [\u00d73] Break tasks into smaller units",
+      pm: "- [\u00d72] Include acceptance criteria with verification commands",
+      manager: "- [\u00d72] Provide ALL feedback at once in REQUEST_CHANGES",
+      engineer: "- [\u00d71] Run tests before READY_FOR_REVIEW",
+    };
+
+    it("injects orchestrator learnings in main prompt section", () => {
       const prompt = compileSprintPrompt("Build it", 1, false, 1, learnings);
-      expect(prompt).toContain("## Past Sprint Learnings");
-      expect(prompt).toContain("Completed: 3/5 tasks");
+      expect(prompt).toContain("## Process Learnings");
+      expect(prompt).toContain("Break tasks into smaller units");
     });
 
-    it("omits learnings section when empty string", () => {
-      const prompt = compileSprintPrompt("Build it", 1, false, 1, "");
-      expect(prompt).not.toContain("Past Sprint Learnings");
+    it("injects PM learnings into PM prompt (autonomous)", () => {
+      const prompt = compileSprintPrompt("Build it", 1, true, 1, learnings);
+      expect(prompt).toContain("apply these improvements to task planning");
+      expect(prompt).toContain("Include acceptance criteria");
     });
 
-    it("omits learnings section when undefined", () => {
+    it("injects manager learnings into manager prompt", () => {
+      const prompt = compileSprintPrompt("Build it", 1, false, 1, learnings);
+      expect(prompt).toContain("apply these improvements to review and coordination");
+      expect(prompt).toContain("Provide ALL feedback at once");
+    });
+
+    it("injects engineer learnings into engineer prompt", () => {
+      const prompt = compileSprintPrompt("Build it", 1, false, 1, learnings);
+      expect(prompt).toContain("apply these improvements to implementation");
+      expect(prompt).toContain("Run tests before READY_FOR_REVIEW");
+    });
+
+    it("includes reflection instruction in manager prompt", () => {
       const prompt = compileSprintPrompt("Build it", 1, false, 1);
-      expect(prompt).not.toContain("Past Sprint Learnings");
+      expect(prompt).toContain("PROCESS_LEARNING:");
+      expect(prompt).toContain("reflect on the sprint process");
     });
 
-    it("injects learnings into PM prompt in autonomous mode", () => {
-      const learnings = "## Sprint sprint-456\nAvoid auth patterns";
-      const prompt = compileSprintPrompt("Plan it", 1, true, 1, learnings);
-      expect(prompt).toContain("Past sprint learnings");
-      expect(prompt).toContain("Avoid auth patterns");
+    it("omits learnings sections when undefined", () => {
+      const prompt = compileSprintPrompt("Build it", 1, false, 1);
+      expect(prompt).not.toContain("Process Learnings");
+      expect(prompt).not.toContain("apply these improvements to task planning");
+    });
+
+    it("omits learnings sections when all empty strings", () => {
+      const empty: RoleLearnings = { orchestrator: "", pm: "", manager: "", engineer: "" };
+      const prompt = compileSprintPrompt("Build it", 1, false, 1, empty);
+      expect(prompt).not.toContain("## Process Learnings");
+      expect(prompt).not.toContain("apply these improvements");
+    });
+
+    it("includes only non-empty role sections", () => {
+      const partial: RoleLearnings = {
+        orchestrator: "",
+        pm: "- [\u00d71] Be specific",
+        manager: "",
+        engineer: "",
+      };
+      const prompt = compileSprintPrompt("Build it", 1, true, 1, partial);
+      expect(prompt).not.toContain("## Process Learnings"); // orchestrator empty
+      expect(prompt).toContain("apply these improvements to task planning");
+      expect(prompt).not.toContain("apply these improvements to review");
+      expect(prompt).not.toContain("apply these improvements to implementation");
     });
   });
 });
