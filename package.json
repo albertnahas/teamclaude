@@ -30,7 +30,9 @@
     "postversion": "git push && git push --tags",
     "release:patch": "npm version patch -m 'chore(teamclaude): release v%s'",
     "release:minor": "npm version minor -m 'chore(teamclaude): release v%s'",
-    "release:major": "npm version major -m 'chore(teamclaude): release v%s'"
+    "release:major": "npm version major -m 'chore(teamclaude): release v%s'",
+    "dev:link": "node scripts/dev-link.js link",
+    "dev:unlink": "node scripts/dev-link.js unlink"
   },
   "devDependencies": {
     "chokidar": "^4.0.3",
