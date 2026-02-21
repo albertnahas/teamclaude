@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { readFileSync, writeFileSync, readdirSync, mkdirSync, copyFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync, mkdirSync, copyFileSync, existsSync, lstatSync, rmSync, symlinkSync, readlinkSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join, basename } from "node:path";
 import { homedir } from "node:os";
@@ -29,6 +30,8 @@ if (args.includes("--help") || args.includes("-h")) {
   Commands:
     start           Start the visualization server (default)
     init            Scaffold agents/commands/skills into .claude/
+    link            Symlink local dev directory into Claude Code plugin system
+    unlink          Remove symlinks and re-clone from git remote
 
   Start options:
     --port <port>   Server port (default: 3456)
