@@ -14,6 +14,7 @@ import { CheckpointModal } from "./components/CheckpointModal";
 import { RetroModal } from "./components/RetroModal";
 import { EscalationBar } from "./components/EscalationBar";
 import { ReplayControls } from "./components/ReplayControls";
+import { MemoryViewer } from "./components/MemoryViewer";
 
 const initialState: SprintState = {
   teamName: null,
@@ -28,6 +29,7 @@ const initialState: SprintState = {
   cycle: 0,
   phase: "idle",
   reviewTaskIds: [],
+  validatingTaskIds: [],
   tokenUsage: { total: 0, byAgent: {}, estimatedCostUsd: 0 },
   checkpoints: [],
   pendingCheckpoint: null,
@@ -170,6 +172,8 @@ function sprintReducer(state: SprintState, event: WsEvent): SprintState {
       return { ...state, tokenBudgetApproaching: true, tokenUsage: event.usage };
     case "token_budget_exceeded":
       return { ...state, tokenBudgetApproaching: true, tokenBudgetExceeded: true, paused: true, tokenUsage: event.usage };
+    case "task_validation":
+      return { ...state, validatingTaskIds: state.validatingTaskIds.filter((id) => id !== event.taskId) };
     default:
       return state;
   }
@@ -192,6 +196,7 @@ export default function App() {
   const [replaySpeed, setReplaySpeed] = useState(10);
   const [replayComplete, setReplayComplete] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showMemory, setShowMemory] = useState(false);
   const replayEventCount = useRef(0);
   const replayTotalEvents = useRef(0);
   const taskSearchRef = useRef<HTMLInputElement>(null);
@@ -360,6 +365,7 @@ export default function App() {
         onStop={handleStop}
         onToggleTheme={toggleTheme}
         onShowShortcuts={() => setShowShortcuts((s) => !s)}
+        onShowMemory={() => setShowMemory(true)}
       />
 
       <div className="container">
@@ -387,6 +393,7 @@ export default function App() {
         <TasksPanel
           tasks={sprintState.tasks}
           reviewTaskIds={sprintState.reviewTaskIds}
+          validatingTaskIds={sprintState.validatingTaskIds}
           searchInputRef={taskSearchRef}
         />
 
@@ -404,6 +411,8 @@ export default function App() {
       )}
 
       {retroData && <RetroModal data={retroData} onClose={handleRetroClose} />}
+
+      {showMemory && <MemoryViewer onClose={() => setShowMemory(false)} />}
 
       {showShortcuts && (
         <div

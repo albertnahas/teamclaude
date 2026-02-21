@@ -98,9 +98,9 @@ export function handleInboxMessage(filePath: string) {
             inferredOwner = message.to;
             break;
           case "READY_FOR_REVIEW":
+            if (state.reviewTaskIds.includes(tid)) break; // dedup — already in review
             inferredStatus = "in_progress";
-            if (!state.reviewTaskIds.includes(tid))
-              state.reviewTaskIds.push(tid);
+            state.reviewTaskIds.push(tid);
             // Checkpoint gate: pause sprint for human review before manager acts
             if (state.checkpoints.includes(tid)) {
               state.checkpoints = state.checkpoints.filter((id) => id !== tid);
@@ -112,17 +112,13 @@ export function handleInboxMessage(filePath: string) {
             }
             break;
           case "APPROVED": {
-            inferredStatus = "completed";
             state.reviewTaskIds = state.reviewTaskIds.filter(
               (id) => id !== tid
             );
-            const completedTask = state.tasks.find((t) => t.id === tid);
-            notifyWebhook("task_completed", {
-              taskId: tid,
-              subject: completedTask?.subject ?? `Task #${tid}`,
-              owner: completedTask?.owner ?? "",
-            });
-            if (completedTask) fireOnTaskComplete(completedTask, state);
+            if (!state.validatingTaskIds.includes(tid))
+              state.validatingTaskIds.push(tid);
+            inferredStatus = "in_progress"; // stays in_progress while validating
+            triggerTaskValidation(tid);
             break;
           }
           case "REQUEST_CHANGES":
@@ -287,6 +283,42 @@ function triggerValidation() {
     console.log(`[sprint] Validation ${statusLabel}${details ? `: ${details}` : ""}`);
   }).catch((err: Error) => {
     console.error("[sprint] Validation error:", err.message);
+  });
+}
+
+// --- Per-task validation gate ---
+
+function triggerTaskValidation(taskId: string) {
+  runVerification(process.cwd()).then((result) => {
+    state.validatingTaskIds = state.validatingTaskIds.filter((id) => id !== taskId);
+    const passed = result.passed || result.results.length === 0;
+    const output = result.results.map((r) => `${r.name}: ${r.passed ? "pass" : "FAIL"}`).join(", ");
+    broadcast({ type: "task_validation", taskId, passed, output });
+
+    if (passed) {
+      const task = state.tasks.find((t) => t.id === taskId);
+      taskProtocolOverrides.set(taskId, {
+        status: "completed",
+        owner: taskProtocolOverrides.get(taskId)?.owner || task?.owner || "",
+      });
+      if (task) { task.status = "completed"; broadcast({ type: "task_updated", task }); }
+      notifyWebhook("task_completed", { taskId, subject: task?.subject ?? "", owner: task?.owner ?? "" });
+      if (task) fireOnTaskComplete(task, state);
+    } else {
+      const sysMsg: Message = {
+        id: `sys-val-${Date.now()}`, timestamp: Date.now(), from: "system", to: "all",
+        content: `Task #${taskId} approval REVERTED — verification failed (${output}). Task remains in_progress.`,
+      };
+      state.messages.push(sysMsg);
+      broadcast({ type: "message_sent", message: sysMsg });
+    }
+  }).catch(() => {
+    // Fail-open on infra errors — complete the task
+    state.validatingTaskIds = state.validatingTaskIds.filter((id) => id !== taskId);
+    const task = state.tasks.find((t) => t.id === taskId);
+    taskProtocolOverrides.set(taskId, { status: "completed", owner: task?.owner || "" });
+    if (task) { task.status = "completed"; broadcast({ type: "task_updated", task }); }
+    if (task) fireOnTaskComplete(task, state);
   });
 }
 

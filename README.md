@@ -97,7 +97,8 @@ npx teamclaude start [--port N]                    # Start visualization server 
 npx teamclaude init [--global] [--force]           # Scaffold agents/commands/skills into .claude/
 npx teamclaude init --template <name>              # Init .sprint.yml from a pre-built template
 npx teamclaude init --template list                # List available templates
-npx teamclaude replay <file.json> [--speed N]      # Replay a recorded sprint in the dashboard
+npx teamclaude replay <file.jsonl> [--speed N]     # Replay a recorded sprint in the dashboard
+npx teamclaude replay examples/small-bug-fix.jsonl # Try a bundled example replay
 npx teamclaude --version                           # Print version
 ```
 

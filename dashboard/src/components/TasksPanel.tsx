@@ -5,6 +5,7 @@ import { MODEL_COST, MODEL_LABEL } from "../types";
 interface TasksPanelProps {
   tasks: TaskInfo[];
   reviewTaskIds: string[];
+  validatingTaskIds: string[];
   searchInputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
@@ -115,11 +116,13 @@ function CostSummary({
 function TaskRow({
   task,
   isReview,
+  isValidating,
   decision,
   completedIds,
 }: {
   task: TaskInfo;
   isReview: boolean;
+  isValidating: boolean;
   decision?: ModelRoutingDecision;
   completedIds: Set<string>;
 }) {
@@ -134,9 +137,14 @@ function TaskRow({
       <span className="task-id">#{task.id}</span>
       <span
         className="status-badge"
-        style={{ background: isReview ? "var(--blue)" : STATUS_COLORS[task.status] }}
+        style={{ background: isValidating ? "var(--purple)" : isReview ? "var(--blue)" : STATUS_COLORS[task.status] }}
       />
       <span className="task-subject">{task.subject}</span>
+      {isValidating && (
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--purple)", fontWeight: 600 }}>
+          Validating...
+        </span>
+      )}
       {unresolvedBlockers.length > 0 && (
         <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--red)" }}>
           blocked
@@ -155,11 +163,13 @@ function TaskRow({
 function KanbanCard({
   task,
   isReview,
+  isValidating,
   decision,
   completedIds,
 }: {
   task: TaskInfo;
   isReview: boolean;
+  isValidating: boolean;
   decision?: ModelRoutingDecision;
   completedIds: Set<string>;
 }) {
@@ -182,6 +192,11 @@ function KanbanCard({
     >
       <div className="card-top">
         <span className="card-id">#{task.id}</span>
+        {isValidating && (
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--purple)", fontWeight: 600 }}>
+            Validating...
+          </span>
+        )}
         {unresolvedBlockers.length > 0 && <span className="card-blocked">blocked</span>}
         {decision && <ModelBadge decision={decision} />}
       </div>
@@ -203,7 +218,7 @@ const STATUS_FILTER_LABELS: Record<StatusFilter, string> = {
   completed: "Done",
 };
 
-export function TasksPanel({ tasks, reviewTaskIds, searchInputRef }: TasksPanelProps) {
+export function TasksPanel({ tasks, reviewTaskIds, validatingTaskIds, searchInputRef }: TasksPanelProps) {
   const [view, setView] = useState<"list" | "board">("list");
   const [taskModels, setTaskModels] = useState<Record<string, ModelRoutingDecision>>({});
   const [query, setQuery] = useState("");
@@ -212,6 +227,7 @@ export function TasksPanel({ tasks, reviewTaskIds, searchInputRef }: TasksPanelP
   const inputRef = (searchInputRef ?? internalRef) as React.RefObject<HTMLInputElement>;
 
   const reviewSet = new Set(reviewTaskIds);
+  const validatingSet = new Set(validatingTaskIds);
   const visible = tasks.filter((t) => t.status !== "deleted");
   const completedIds = new Set(visible.filter((t) => t.status === "completed").map((t) => t.id));
   const done = completedIds.size;
@@ -297,6 +313,7 @@ export function TasksPanel({ tasks, reviewTaskIds, searchInputRef }: TasksPanelP
                   key={task.id}
                   task={task}
                   isReview={reviewSet.has(task.id)}
+                  isValidating={validatingSet.has(task.id)}
                   decision={taskModels[task.id]}
                   completedIds={completedIds}
                 />
@@ -330,6 +347,7 @@ export function TasksPanel({ tasks, reviewTaskIds, searchInputRef }: TasksPanelP
                         key={task.id}
                         task={task}
                         isReview={reviewSet.has(task.id)}
+                        isValidating={validatingSet.has(task.id)}
                         decision={taskModels[task.id]}
                         completedIds={completedIds}
                       />

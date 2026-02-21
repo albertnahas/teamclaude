@@ -38,40 +38,38 @@ describe("compileSprintPrompt", () => {
       expect(prompt).toContain("Distribute tasks evenly");
     });
 
-    it("includes quality review checklist for manager", () => {
+    it("includes mandatory review protocol for manager", () => {
       const prompt = compileSprintPrompt("Build features", 2, true, 1);
-      expect(prompt).toContain("Review checklist");
+      expect(prompt).toContain("Mandatory Review Protocol");
       expect(prompt).toContain("REQUEST_CHANGES");
     });
 
-    it("manager checklist includes CSS verification", () => {
+    it("manager protocol includes CSS verification", () => {
       const prompt = compileSprintPrompt("Build features", 2, true, 1);
-      expect(prompt).toContain("CSS exists for every new className");
-      expect(prompt).toContain("Grep the stylesheet");
+      expect(prompt).toContain("grep the stylesheet for every new className");
     });
 
-    it("manager checklist includes duplicate data detection", () => {
+    it("manager protocol includes duplicate detection", () => {
       const prompt = compileSprintPrompt("Build features", 2, true, 1);
       expect(prompt).toContain("Single source of truth");
-      expect(prompt).toContain("no duplicate pricing tables");
     });
 
-    it("manager checklist includes test isolation verification", () => {
+    it("manager protocol requires reading actual code", () => {
       const prompt = compileSprintPrompt("Build features", 2, true, 1);
-      expect(prompt).toContain("mocks cover all imported modules");
-      expect(prompt).toContain("afterEach cleanup");
+      expect(prompt).toContain("Read the actual code");
+      expect(prompt).toContain("Do NOT skip this step");
     });
 
-    it("manager checklist requires reading actual files", () => {
+    it("manager protocol includes server-side validation warning", () => {
       const prompt = compileSprintPrompt("Build features", 2, true, 1);
-      expect(prompt).toContain("Read the actual files changed");
-      expect(prompt).toContain("do not approve based solely on test pass/fail");
+      expect(prompt).toContain("server runs automated verification after every APPROVED");
+      expect(prompt).toContain("reverted to in_progress");
     });
 
-    it("manager checklist includes data correctness verification", () => {
+    it("manager prompt tells to respond immediately to reviews", () => {
       const prompt = compileSprintPrompt("Build features", 2, true, 1);
-      expect(prompt).toContain("verify they are factually correct");
-      expect(prompt).toContain("Do not trust AI-generated numbers");
+      expect(prompt).toContain("begin reviewing RIGHT AWAY");
+      expect(prompt).toContain("engineer is idle and blocked");
     });
   });
 
@@ -143,6 +141,12 @@ describe("compileSprintPrompt", () => {
     it("includes pre-submit checklist requiring duplicate search for constants", () => {
       const prompt = compileSprintPrompt("Build it", 1, false, 1);
       expect(prompt).toContain("Never duplicate data that exists elsewhere");
+    });
+
+    it("tells engineers to STOP after READY_FOR_REVIEW", () => {
+      const prompt = compileSprintPrompt("Build it", 1, false, 1);
+      expect(prompt).toContain("STOP — your turn is done");
+      expect(prompt).toContain("Do not re-send");
     });
   });
 
@@ -341,6 +345,22 @@ describe("loadAgentDefinition", () => {
   it("returns content for tech-writer role", () => {
     writeFileSync(join(dir, "agents", "tech-writer.md"), "---\nname: tech-writer\n---\n# Tech Writer");
     expect(loadAgentDefinition("tech-writer", dir)).toContain("Tech Writer");
+  });
+
+  it("loads devops agent from project agents/ directory", () => {
+    const projectRoot = join(__dirname, "..");
+    const def = loadAgentDefinition("devops", projectRoot);
+    expect(def).not.toBeNull();
+    expect(def).toContain("DevOps");
+    expect(def).not.toContain("---");
+  });
+
+  it("loads security-auditor agent from project agents/ directory", () => {
+    const projectRoot = join(__dirname, "..");
+    const def = loadAgentDefinition("security-auditor", projectRoot);
+    expect(def).not.toBeNull();
+    expect(def).toContain("Security Auditor");
+    expect(def).not.toContain("---");
   });
 });
 

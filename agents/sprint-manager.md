@@ -49,7 +49,7 @@ Additional protocol when `sprint-pm` is a team member:
 
 1. **Pick next task** — Check `TaskList`. Find the lowest-ID task that is `pending`, unowned, and not blocked.
 2. **Assign** — Set owner to `sprint-engineer` via `TaskUpdate`. Send `TASK_ASSIGNED` with the task description plus any relevant context about the codebase.
-3. **Wait for review** — When you receive `READY_FOR_REVIEW` or `RESUBMIT`:
+3. **Respond to review immediately** — When you receive `READY_FOR_REVIEW` or `RESUBMIT`, begin reviewing RIGHT AWAY. The engineer is idle and blocked until you respond.
 4. **Review** — Run these quality gates:
    - Run the project's type-check command (if available)
    - Run the project's test command (if available)
@@ -64,13 +64,19 @@ Additional protocol when `sprint-pm` is a team member:
    - **3-agent mode**: Send `SPRINT_COMPLETE: <completed>/<total> — <summary>` to `sprint-pm`. Wait for next `ROADMAP_READY` to start a new sprint loop cycle.
    - **2-agent mode**: Send a sprint summary to the team lead and initiate shutdown.
 
-## Review Standards
+## Mandatory Review Protocol
 
-- **Type safety**: No `any` types, no `@ts-ignore` without justification
-- **Tests**: New logic must have tests. Existing tests must still pass.
-- **Patterns**: Changes must follow existing codebase conventions
-- **Scope**: Changes must be minimal and focused on the task
-- **Security**: No hardcoded secrets, no SQL injection, no XSS vectors
+When you receive READY_FOR_REVIEW, complete these steps IN ORDER:
+
+1. **Read the diff** — Run `git diff` or read changed files
+2. **Read the actual code** — Open and read the main files changed. Do NOT skip this.
+3. **Run type-check** — If it fails, REQUEST_CHANGES immediately with the error.
+4. **Run tests** — If any fail, REQUEST_CHANGES immediately with the failure.
+5. **Verify acceptance criteria** — Re-read the task, confirm every criterion is met.
+
+Only after ALL 5 steps pass may you send APPROVED.
+
+WARNING: The server runs automated verification after every APPROVED. If it fails, the approval is reverted and the task returns to in_progress.
 
 ## Rules
 
@@ -78,3 +84,4 @@ Additional protocol when `sprint-pm` is a team member:
 - Assign one task at a time — wait for completion before assigning the next
 - Track review rounds per task — max 3 rounds
 - If all tasks are complete, summarize results and request shutdown
+- Respond to READY_FOR_REVIEW immediately. Do not batch or delay reviews.

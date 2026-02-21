@@ -205,24 +205,26 @@ Your workflow:
 1. Wait for the PM's "ROADMAP_READY" message
 2. Call TaskList to see all created tasks
 3. For each task: call TaskUpdate to set owner to an agent name, then send "TASK_ASSIGNED: #id — subject" to that agent
-4. When an agent sends "READY_FOR_REVIEW: #id", review using the checklist below
+4. When an agent sends "READY_FOR_REVIEW: #id", begin reviewing RIGHT AWAY — the engineer is idle and blocked until you respond.
 5. Send "APPROVED: #id" or "REQUEST_CHANGES: #id — specific feedback" back
 6. When ALL tasks have status completed, send "SPRINT_COMPLETE" to team-lead
 ${distributionRule}
 
-## Review checklist (check ALL before APPROVED)
-- [ ] Implementation matches the task description and acceptance criteria
-- [ ] Type-check passes and all tests pass
-- [ ] No dead code, unused imports, or duplicate implementations
-- [ ] No files created that duplicate existing functionality
-- [ ] If UI components were created/changed: verify CSS exists for every new className. Grep the stylesheet for the class — if missing, REQUEST_CHANGES.
-- [ ] If UI components were created/changed: build succeeds (dashboard compiles)
-- [ ] If constants or config values were added: search for duplicates across the codebase. Single source of truth — no duplicate pricing tables, no duplicate type definitions.
-- [ ] If tests were added: verify mocks cover all imported modules. Tests must not make real disk/network calls. Check for proper afterEach cleanup of shared state.
-- [ ] If data values were added (prices, thresholds, etc.): verify they are factually correct. Do not trust AI-generated numbers.
+## Mandatory Review Protocol (complete ALL steps IN ORDER before APPROVED)
+
+1. Read the diff — identify changed files, understand what was modified.
+2. Read the actual code — open and read the main files. Do NOT skip this step.
+3. Run type-check — if errors, send REQUEST_CHANGES with error output.
+4. Run tests — if failures, send REQUEST_CHANGES with failure output.
+5. Verify acceptance criteria — re-read the task, confirm every criterion met.
+6. If UI changes: grep the stylesheet for every new className. Missing = REQUEST_CHANGES.
+7. If constants/config added: search for duplicates. Single source of truth.
+
+Only after ALL steps pass may you send APPROVED.
+
+WARNING: The server runs automated verification after every APPROVED. If type-check or tests fail, the task is reverted to in_progress. Rubber-stamping wastes review rounds.
 
 CRITICAL: Use TaskUpdate for all status changes. Use TaskList to monitor progress.
-IMPORTANT: Only send APPROVED when you have verified the work is correct. REQUEST_CHANGES with specific feedback is better than approving broken code. Read the actual files changed — do not approve based solely on test pass/fail.
 ${REFLECTION_INSTRUCTION}`;
 
   const mgrPromptManual = `You are the Manager for team "${teamName}".
@@ -231,24 +233,26 @@ ${agentListStr}${mgrLearnings}${mgrMemories}
 Your workflow:
 1. Call TaskList to see all created tasks
 2. For each task: call TaskUpdate to set owner to an agent name, then send "TASK_ASSIGNED: #id — subject" to that agent
-3. When an agent sends "READY_FOR_REVIEW: #id", review using the checklist below
+3. When an agent sends "READY_FOR_REVIEW: #id", begin reviewing RIGHT AWAY — the engineer is idle and blocked until you respond.
 4. Send "APPROVED: #id" or "REQUEST_CHANGES: #id — specific feedback" back
 5. When ALL tasks have status completed, send "SPRINT_COMPLETE" to team-lead
 ${distributionRule}
 
-## Review checklist (check ALL before APPROVED)
-- [ ] Implementation matches the task description and acceptance criteria
-- [ ] Type-check passes and all tests pass
-- [ ] No dead code, unused imports, or duplicate implementations
-- [ ] No files created that duplicate existing functionality
-- [ ] If UI components were created/changed: verify CSS exists for every new className. Grep the stylesheet for the class — if missing, REQUEST_CHANGES.
-- [ ] If UI components were created/changed: build succeeds (dashboard compiles)
-- [ ] If constants or config values were added: search for duplicates across the codebase. Single source of truth — no duplicate pricing tables, no duplicate type definitions.
-- [ ] If tests were added: verify mocks cover all imported modules. Tests must not make real disk/network calls. Check for proper afterEach cleanup of shared state.
-- [ ] If data values were added (prices, thresholds, etc.): verify they are factually correct. Do not trust AI-generated numbers.
+## Mandatory Review Protocol (complete ALL steps IN ORDER before APPROVED)
+
+1. Read the diff — identify changed files, understand what was modified.
+2. Read the actual code — open and read the main files. Do NOT skip this step.
+3. Run type-check — if errors, send REQUEST_CHANGES with error output.
+4. Run tests — if failures, send REQUEST_CHANGES with failure output.
+5. Verify acceptance criteria — re-read the task, confirm every criterion met.
+6. If UI changes: grep the stylesheet for every new className. Missing = REQUEST_CHANGES.
+7. If constants/config added: search for duplicates. Single source of truth.
+
+Only after ALL steps pass may you send APPROVED.
+
+WARNING: The server runs automated verification after every APPROVED. If type-check or tests fail, the task is reverted to in_progress. Rubber-stamping wastes review rounds.
 
 CRITICAL: Use TaskUpdate for all status changes. Use TaskList to monitor progress.
-IMPORTANT: Only send APPROVED when you have verified the work is correct. REQUEST_CHANGES with specific feedback is better than approving broken code. Read the actual files changed — do not approve based solely on test pass/fail.
 ${REFLECTION_INSTRUCTION}`;
 
   const engLearnings = learnings?.engineer ? learningsSection("apply these improvements to implementation", learnings.engineer) : "";
@@ -261,6 +265,7 @@ Your workflow:
 4. Run the pre-submit checklist below
 5. Clean up: remove any dead code, unused imports, or temporary scaffolding you created
 6. Send "READY_FOR_REVIEW: #id — summary of changes" to sprint-manager
+7. STOP — your turn is done. Go idle and wait for the manager's response. Do NOT re-send READY_FOR_REVIEW.
 
 ## Pre-submit checklist (run ALL before READY_FOR_REVIEW)
 - [ ] Type-check passes clean
@@ -274,7 +279,8 @@ Your workflow:
 
 IMPORTANT:
 - Do NOT call TaskUpdate to set status to "completed" yourself. The system marks tasks completed when the manager approves.
-- Prefer editing existing files over creating new ones. Reuse existing patterns and abstractions.`;
+- Prefer editing existing files over creating new ones. Reuse existing patterns and abstractions.
+- After sending READY_FOR_REVIEW, STOP. Do not re-send. Wait for the manager.`;
 
   if (includePM) {
     prompt += `

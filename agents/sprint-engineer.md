@@ -49,3 +49,4 @@ All communication with `sprint-manager` uses prefixed messages:
 - One task at a time — finish or escalate before taking the next
 - After a task is approved or escalated, check `TaskList` for the next available task
 - If blocked by a dependency, notify `sprint-manager` immediately
+- After sending READY_FOR_REVIEW, go idle immediately. Do NOT re-send or poll for a response.

@@ -18,7 +18,7 @@ const tmpDir = mkdtempSync(join(tmpdir(), "tc-replay-test-"));
 
 function makeEvent(type: WsEvent["type"], extra: object = {}): WsEvent {
   if (type === "init") {
-    return { type: "init", state: { teamName: "t", projectName: "p", agents: [], tasks: [], messages: [], paused: false, escalation: null, mergeConflict: null, mode: "manual", cycle: 1, phase: "idle", reviewTaskIds: [], tokenUsage: { total: 0, byAgent: {}, estimatedCostUsd: 0 }, checkpoints: [], pendingCheckpoint: null, tmuxAvailable: false, tmuxSessionName: null, ...extra } };
+    return { type: "init", state: { teamName: "t", projectName: "p", agents: [], tasks: [], messages: [], paused: false, escalation: null, mergeConflict: null, mode: "manual", cycle: 1, phase: "idle", reviewTaskIds: [], validatingTaskIds: [], tokenUsage: { total: 0, byAgent: {}, estimatedCostUsd: 0 }, checkpoints: [], pendingCheckpoint: null, tmuxAvailable: false, tmuxSessionName: null, ...extra } };
   }
   if (type === "paused") return { type: "paused", paused: false, ...extra } as WsEvent;
   return { type: "process_started", pid: 0, ...extra } as WsEvent;
@@ -303,5 +303,32 @@ describe("Recorder", () => {
     const lines = readFileSync(file2, "utf-8").trim().split("\n");
     expect(lines).toHaveLength(1);
     expect(JSON.parse(lines[0]).timestamp).toBe(0); // new start time after reset
+  });
+});
+
+// --- Example replay files ---
+
+describe("example replay files", () => {
+  const projectRoot = join(__dirname, "..");
+
+  it("loads examples/small-bug-fix.jsonl without error", () => {
+    const recording = loadRecording(join(projectRoot, "examples", "small-bug-fix.jsonl"));
+    expect(recording.events.length).toBeGreaterThan(0);
+    expect(recording.events[0].timestamp).toBe(0);
+    expect(recording.events[0].event.type).toBe("init");
+  });
+
+  it("loads examples/medium-feature.jsonl without error", () => {
+    const recording = loadRecording(join(projectRoot, "examples", "medium-feature.jsonl"));
+    expect(recording.events.length).toBeGreaterThan(0);
+    expect(recording.events[0].timestamp).toBe(0);
+    expect(recording.events[0].event.type).toBe("init");
+  });
+
+  it("loads examples/security-audit.jsonl without error", () => {
+    const recording = loadRecording(join(projectRoot, "examples", "security-audit.jsonl"));
+    expect(recording.events.length).toBeGreaterThan(0);
+    expect(recording.events[0].timestamp).toBe(0);
+    expect(recording.events[0].event.type).toBe("init");
   });
 });

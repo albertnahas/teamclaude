@@ -19,7 +19,7 @@ import { createGist } from "./gist.js";
 import { loadTemplates } from "./templates.js";
 import * as tmux from "./tmux.js";
 import { notifyWebhook } from "./notifications.js";
-import { fireOnSprintStop } from "./plugin-loader.js";
+import { fireOnSprintStart, fireOnSprintStop } from "./plugin-loader.js";
 import { loadGitHubConfig, postRetroToPR, postSprintStatusToPR } from "./github.js";
 import { loadMemories, saveMemory, deleteMemory, searchMemories } from "./memory.js";
 import { sprintCtx, launchViaTmux, launchViaSpawn, stopPanePolling, reconnectTmuxSession } from "./sprint-lifecycle.js";
@@ -70,6 +70,7 @@ function handleLaunch(req: IncomingMessage, res: ServerResponse) {
       // Generate sprint ID once on launch so recording and history use the same ID
       sprintCtx.currentSprintId = generateSprintId();
       sprintCtx.onSprintStart?.(sprintCtx.currentSprintId);
+      fireOnSprintStart(state);
 
       createSprintBranch(state.teamName ?? "sprint", state.cycle, process.cwd()).then((branch) => {
         sprintCtx.sprintBranch = branch;
@@ -354,8 +355,9 @@ export function handleRequest(req: IncomingMessage, res: ServerResponse) {
   } else if (url === "/api/templates" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "application/json", ...CORS });
     res.end(JSON.stringify(loadTemplates()));
-  } else if (url === "/api/history" && req.method === "GET") {
+  } else if (url.startsWith("/api/history") && !url.startsWith("/api/history/") && req.method === "GET") {
     try {
+      const parsedHistoryUrl = new URL(url, "http://localhost");
       const dir = historyDir();
       const entries = existsSync(dir)
         ? readdirSync(dir, { withFileTypes: true })
@@ -370,6 +372,23 @@ export function handleRequest(req: IncomingMessage, res: ServerResponse) {
             })
             .sort((a, b) => a.id.localeCompare(b.id))
         : [];
+      if (parsedHistoryUrl.searchParams.get("format") === "csv") {
+        const header = "id,teamName,tasksCompleted,totalTasks,durationMs,startedAt,completedAt";
+        const rows = entries.map(({ id, record: r }) => {
+          const teamName = r?.sprintId?.replace(/-\d+$/, "") ?? id;
+          const startMs = r?.startedAt ? new Date(r.startedAt).getTime() : 0;
+          const endMs = r?.completedAt ? new Date(r.completedAt).getTime() : 0;
+          const durationMs = startMs && endMs ? endMs - startMs : 0;
+          return [id, teamName, r?.completedTasks ?? 0, r?.totalTasks ?? 0, durationMs, r?.startedAt ?? "", r?.completedAt ?? ""].join(",");
+        });
+        res.writeHead(200, {
+          "Content-Type": "text/csv",
+          "Content-Disposition": "attachment; filename=\"sprint-history.csv\"",
+          ...CORS,
+        });
+        res.end([header, ...rows].join("\n"));
+        return;
+      }
       res.writeHead(200, { "Content-Type": "application/json", ...CORS });
       res.end(JSON.stringify(entries));
     } catch {

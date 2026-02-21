@@ -1,0 +1,20 @@
+{"timestamp":0,"event":{"type":"init","state":{"teamName":"sprint-bugfix","projectName":"my-app","agents":[],"tasks":[],"messages":[],"paused":false,"escalation":null,"mergeConflict":null,"mode":"manual","cycle":0,"phase":"idle","reviewTaskIds":[],"tokenUsage":{"total":0,"byAgent":{},"estimatedCostUsd":0},"checkpoints":[],"pendingCheckpoint":null,"tmuxAvailable":false,"tmuxSessionName":null}}}
+{"timestamp":200,"event":{"type":"agent_status","agent":{"name":"sprint-manager","agentId":"agent-1","agentType":"manager","status":"active"}}}
+{"timestamp":400,"event":{"type":"agent_status","agent":{"name":"sprint-engineer-1","agentId":"agent-2","agentType":"engineer","status":"active"}}}
+{"timestamp":600,"event":{"type":"cycle_info","cycle":0,"phase":"sprinting","mode":"manual"}}
+{"timestamp":800,"event":{"type":"task_updated","task":{"id":"1","subject":"Fix null pointer in user login flow","status":"pending","owner":"","blockedBy":[]}}}
+{"timestamp":1000,"event":{"type":"task_updated","task":{"id":"2","subject":"Add missing error boundary to dashboard","status":"pending","owner":"","blockedBy":[]}}}
+{"timestamp":1500,"event":{"type":"message_sent","message":{"id":"msg-1","timestamp":1500,"from":"sprint-manager","to":"sprint-engineer-1","content":"TASK_ASSIGNED: #1 — Fix null pointer in user login flow","protocol":"TASK_ASSIGNED"}}}
+{"timestamp":1600,"event":{"type":"task_updated","task":{"id":"1","subject":"Fix null pointer in user login flow","status":"in_progress","owner":"sprint-engineer-1","blockedBy":[]}}}
+{"timestamp":2500,"event":{"type":"token_usage","usage":{"total":1200,"byAgent":{"sprint-engineer-1":1200},"estimatedCostUsd":0.0018}}}
+{"timestamp":8000,"event":{"type":"message_sent","message":{"id":"msg-2","timestamp":8000,"from":"sprint-engineer-1","to":"sprint-manager","content":"READY_FOR_REVIEW: #1 — Fixed null check in auth.ts:42, added unit test","protocol":"READY_FOR_REVIEW"}}}
+{"timestamp":9000,"event":{"type":"message_sent","message":{"id":"msg-3","timestamp":9000,"from":"sprint-manager","to":"sprint-engineer-1","content":"APPROVED: #1 — Clean fix, test coverage looks good","protocol":"APPROVED"}}}
+{"timestamp":9100,"event":{"type":"task_updated","task":{"id":"1","subject":"Fix null pointer in user login flow","status":"completed","owner":"sprint-engineer-1","blockedBy":[]}}}
+{"timestamp":9500,"event":{"type":"message_sent","message":{"id":"msg-4","timestamp":9500,"from":"sprint-manager","to":"sprint-engineer-1","content":"TASK_ASSIGNED: #2 — Add missing error boundary to dashboard","protocol":"TASK_ASSIGNED"}}}
+{"timestamp":9600,"event":{"type":"task_updated","task":{"id":"2","subject":"Add missing error boundary to dashboard","status":"in_progress","owner":"sprint-engineer-1","blockedBy":[]}}}
+{"timestamp":14000,"event":{"type":"token_usage","usage":{"total":3100,"byAgent":{"sprint-manager":900,"sprint-engineer-1":2200},"estimatedCostUsd":0.0047}}}
+{"timestamp":16000,"event":{"type":"message_sent","message":{"id":"msg-5","timestamp":16000,"from":"sprint-engineer-1","to":"sprint-manager","content":"READY_FOR_REVIEW: #2 — Added ErrorBoundary component, wrapped routes","protocol":"READY_FOR_REVIEW"}}}
+{"timestamp":17200,"event":{"type":"message_sent","message":{"id":"msg-6","timestamp":17200,"from":"sprint-manager","to":"sprint-engineer-1","content":"APPROVED: #2 — Good error boundary pattern","protocol":"APPROVED"}}}
+{"timestamp":17300,"event":{"type":"task_updated","task":{"id":"2","subject":"Add missing error boundary to dashboard","status":"completed","owner":"sprint-engineer-1","blockedBy":[]}}}
+{"timestamp":17500,"event":{"type":"agent_status","agent":{"name":"sprint-engineer-1","agentId":"agent-2","agentType":"engineer","status":"idle"}}}
+{"timestamp":17600,"event":{"type":"agent_status","agent":{"name":"sprint-manager","agentId":"agent-1","agentType":"manager","status":"idle"}}}

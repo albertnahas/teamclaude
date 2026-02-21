@@ -8,9 +8,10 @@ interface SprintBarProps {
   onStop: () => void;
   onToggleTheme: () => void;
   onShowShortcuts?: () => void;
+  onShowMemory?: () => void;
 }
 
-export function SprintBar({ state, theme, onPause, onStop, onToggleTheme, onShowShortcuts }: SprintBarProps) {
+export function SprintBar({ state, theme, onPause, onStop, onToggleTheme, onShowShortcuts, onShowMemory }: SprintBarProps) {
   const cycleLabel =
     state.cycle > 0
       ? `Cycle ${state.cycle} · ${state.phase}`
@@ -31,6 +32,16 @@ export function SprintBar({ state, theme, onPause, onStop, onToggleTheme, onShow
       <span className="sprint-bar-sep" />
       {cycleLabel && <span className="sprint-bar-cycle">{cycleLabel}</span>}
       <span className="sprint-bar-spacer" />
+      {onShowMemory && (
+        <button
+          className="theme-toggle"
+          onClick={onShowMemory}
+          title="Agent memories"
+          style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}
+        >
+          mem
+        </button>
+      )}
       {onShowShortcuts && (
         <button
           className="theme-toggle"
