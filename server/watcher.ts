@@ -1,154 +1,26 @@
-import { basename, dirname, join } from "node:path";
-import { statSync, readFileSync, existsSync } from "node:fs";
+import { basename } from "node:path";
+import { statSync } from "node:fs";
 import { watch } from "chokidar";
 import {
   state,
   inboxCursors,
   taskProtocolOverrides,
-  teamInitMessageSent,
-  setTeamInitMessageSent,
   safeReadJSON,
   broadcast,
 } from "./state.js";
 import { detectProtocol, extractContent } from "./protocol.js";
-import type { AgentInfo, Message, TaskInfo } from "./state.js";
+import type { Message } from "./state.js";
 import { runVerification } from "./verification.js";
 import { notifyWebhook } from "./notifications.js";
+import { fireOnTaskComplete, fireOnEscalation } from "./plugin-loader.js";
+import { accumulateTokenUsage } from "./token-tracker.js";
+import { handleTaskFile } from "./task-state.js";
+import { ensureAgent, handleTeamConfig } from "./team-config.js";
+import { saveMemory } from "./memory.js";
 
-function inferAgentType(name: string): string {
-  if (name.includes("engineer")) return "sprint-engineer";
-  if (name.includes("manager")) return "sprint-manager";
-  if (name.includes("pm")) return "sprint-pm";
-  return "unknown";
-}
-
-/** Auto-discover an agent from inbox traffic if not already known. */
-function ensureAgent(name: string): AgentInfo | null {
-  if (!name || name === "unknown" || name === "system" || name === "all") return null;
-  const existing = state.agents.find((a) => a.name === name);
-  if (existing) return existing;
-  const agent: AgentInfo = {
-    name,
-    agentId: `${name}@${state.teamName ?? "unknown"}`,
-    agentType: inferAgentType(name),
-    status: "active",
-  };
-  state.agents.push(agent);
-  broadcast({ type: "agent_status", agent });
-  return agent;
-}
-
-export function isSprintTeam(config: any): boolean {
-  if (!config?.members) return false;
-  // Accept by team name prefix (persists after agent shutdown)
-  if (typeof config.name === "string" && config.name.startsWith("sprint-")) return true;
-  // Accept by member names (active sprint detection)
-  const names: string[] = config.members.map((m: any) => m.name);
-  return (
-    names.includes("sprint-manager") &&
-    names.some(
-      (n) => n === "sprint-engineer" || /^sprint-engineer-\d+$/.test(n)
-    )
-  );
-}
-
-let onTeamDiscovered: ((agents: string[]) => void) | null = null;
-export function setTeamDiscoveredHook(fn: (agents: string[]) => void) {
-  onTeamDiscovered = fn;
-}
-
-export function handleTeamConfig(filePath: string) {
-  const config = safeReadJSON(filePath) as any;
-  if (!config || !isSprintTeam(config)) return;
-
-  const teamDir = dirname(filePath);
-  const teamName = basename(teamDir);
-  state.teamName = teamName;
-
-  state.agents = (config.members || []).map((m: any) => ({
-    name: m.name,
-    agentId: m.agentId,
-    agentType: m.agentType || "unknown",
-    status: "active" as const,
-  }));
-
-  state.mode = state.agents.some((a) => a.name === "sprint-pm")
-    ? "autonomous"
-    : "manual";
-  state.cycle = 0;
-  state.phase = state.mode === "autonomous" ? "analyzing" : "sprinting";
-
-  console.log(
-    `[sprint] Tracking team: ${teamName} (${state.agents.length} agents, ${state.mode} mode)`
-  );
-  broadcast({ type: "init", state });
-
-  notifyWebhook("sprint_started", {
-    teamName,
-    mode: state.mode,
-    taskCount: state.tasks.length,
-  });
-
-  onTeamDiscovered?.(state.agents.map((a) => a.name));
-
-  if (!teamInitMessageSent) {
-    setTeamInitMessageSent(true);
-    const sysContent =
-      state.mode === "autonomous"
-        ? "Sprint initialized — PM is analyzing the codebase and preparing the roadmap"
-        : "Sprint initialized — parsing roadmap and delegating tasks";
-    const sysMsg: Message = {
-      id: `sys-${Date.now()}`,
-      timestamp: Date.now(),
-      from: "system",
-      to: "all",
-      content: sysContent,
-    };
-    state.messages.push(sysMsg);
-    broadcast({ type: "message_sent", message: sysMsg });
-  }
-}
-
-// Pricing per million tokens by model family
-const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  haiku:  { input: 0.80, output: 4 },
-  sonnet: { input: 3,    output: 15 },
-  opus:   { input: 15,   output: 75 },
-};
-
-function resolveModelPricing(): { input: number; output: number } {
-  const sprintYml = join(process.cwd(), ".sprint.yml");
-  if (existsSync(sprintYml)) {
-    try {
-      const raw = readFileSync(sprintYml, "utf-8");
-      const m = raw.match(/^agents:\s*\n(?:[ \t]+\S[^\n]*\n)*?[ \t]+model:\s*(\S+)/m);
-      if (m) {
-        const model = m[1].toLowerCase();
-        for (const key of Object.keys(MODEL_PRICING)) {
-          if (model.includes(key)) return MODEL_PRICING[key];
-        }
-      }
-    } catch {}
-  }
-  return MODEL_PRICING.sonnet;
-}
-
-const { input: INPUT_COST_PER_MTOK, output: OUTPUT_COST_PER_MTOK } = resolveModelPricing();
-
-function accumulateTokenUsage(
-  agentName: string,
-  inputTokens: number,
-  outputTokens: number
-) {
-  const tokens = inputTokens + outputTokens;
-  state.tokenUsage.total += tokens;
-  state.tokenUsage.byAgent[agentName] =
-    (state.tokenUsage.byAgent[agentName] || 0) + tokens;
-  state.tokenUsage.estimatedCostUsd +=
-    (inputTokens * INPUT_COST_PER_MTOK + outputTokens * OUTPUT_COST_PER_MTOK) /
-    1_000_000;
-  broadcast({ type: "token_usage", usage: state.tokenUsage });
-}
+// Re-export symbols that watcher.test.ts imports
+export { isSprintTeam, setTeamDiscoveredHook, handleTeamConfig } from "./team-config.js";
+export { handleTaskFile } from "./task-state.js";
 
 export function handleInboxMessage(filePath: string) {
   if (!state.teamName || !filePath.includes(state.teamName)) return;
@@ -217,7 +89,7 @@ export function handleInboxMessage(filePath: string) {
       const taskMatch = content.match(/^[A-Z_]+:\s*#?(\d+)/);
       if (taskMatch) {
         const tid = taskMatch[1];
-        let inferredStatus: TaskInfo["status"] | null = null;
+        let inferredStatus: import("./state.js").TaskInfo["status"] | null = null;
         let inferredOwner: string | null = null;
 
         switch (message.protocol) {
@@ -250,6 +122,7 @@ export function handleInboxMessage(filePath: string) {
               subject: completedTask?.subject ?? `Task #${tid}`,
               owner: completedTask?.owner ?? "",
             });
+            if (completedTask) fireOnTaskComplete(completedTask, state);
             break;
           }
           case "REQUEST_CHANGES":
@@ -294,6 +167,31 @@ export function handleInboxMessage(filePath: string) {
         reason,
         from,
       });
+      fireOnEscalation(state.escalation, state);
+    }
+
+    if (message.protocol === "MEMORY") {
+      // Format: MEMORY: <key> — <value>
+      const body = content.replace(/^MEMORY:\s*/, "");
+      const sepIdx = body.indexOf(" — ");
+      if (sepIdx > 0) {
+        const key = body.slice(0, sepIdx).trim();
+        const value = body.slice(sepIdx + 3).trim();
+        if (key && value) {
+          // Infer role from agent name
+          const agentName = from.toLowerCase();
+          const role = agentName.includes("pm") ? "pm"
+            : agentName.includes("manager") ? "manager"
+            : agentName.includes("qa") ? "qa"
+            : agentName.includes("tech-writer") ? "tech-writer"
+            : "engineer";
+          try {
+            saveMemory(process.cwd(), role, key, value, state.teamName);
+          } catch (err: any) {
+            console.error("[memory] Failed to save memory:", err.message);
+          }
+        }
+      }
     }
 
     if (state.mode === "autonomous" && message.protocol) {
@@ -358,72 +256,6 @@ export function handleInboxMessage(filePath: string) {
   inboxCursors.set(cursorKey, messages.length);
 }
 
-export function handleTaskFile(filePath: string) {
-  if (!state.teamName || !filePath.includes(state.teamName)) return;
-
-  const raw = safeReadJSON(filePath) as any;
-  if (!raw) return;
-
-  const tasks = Array.isArray(raw) ? raw : [raw];
-
-  for (const t of tasks) {
-    if (!t.id) continue;
-
-    const subj = t.subject || t.title || "";
-    if (
-      subj === "sprint-manager" ||
-      subj === "sprint-pm" ||
-      subj === "sprint-engineer" ||
-      /^sprint-engineer-\d+$/.test(subj)
-    )
-      continue;
-
-    const task: TaskInfo = {
-      id: String(t.id),
-      subject: t.subject || t.title || "Untitled",
-      status: t.status || "pending",
-      owner: t.owner || "",
-      blockedBy: t.blockedBy || [],
-      description: t.description,
-    };
-
-    const override = taskProtocolOverrides.get(task.id);
-    if (override) {
-      const rank = {
-        pending: 0,
-        in_progress: 1,
-        completed: 2,
-        deleted: 3,
-      } as const;
-      if ((rank[override.status] ?? 0) > (rank[task.status] ?? 0))
-        task.status = override.status;
-      if (override.owner && !task.owner) task.owner = override.owner;
-    }
-
-    const existing = state.tasks.findIndex((x) => x.id === task.id);
-    if (existing >= 0) {
-      state.tasks[existing] = task;
-    } else {
-      state.tasks.push(task);
-    }
-
-    if (task.status === "completed") {
-      state.reviewTaskIds = state.reviewTaskIds.filter(
-        (id) => id !== task.id
-      );
-      // Unblock tasks that depended on this one
-      for (const t of state.tasks) {
-        if (t.blockedBy.includes(task.id)) {
-          t.blockedBy = t.blockedBy.filter((id) => id !== task.id);
-          broadcast({ type: "task_updated", task: t });
-        }
-      }
-    }
-
-    broadcast({ type: "task_updated", task });
-  }
-}
-
 // --- Validation gate ---
 
 function triggerValidation() {
@@ -461,7 +293,7 @@ function triggerValidation() {
 const STALE_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 hours
 let watcherReady = false;
 
-function isStale(filePath: string): boolean {
+export function isStale(filePath: string): boolean {
   try {
     const mtime = statSync(filePath).mtimeMs;
     return Date.now() - mtime > STALE_THRESHOLD_MS;

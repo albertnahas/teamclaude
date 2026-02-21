@@ -19,6 +19,14 @@ agents:
   # Default model for all sprint agents (haiku | sonnet | opus)
   # Also determines token cost estimates in the dashboard
   model: sonnet
+  #
+  # Custom role composition — overrides the numeric engineers count.
+  # Built-in roles: engineer, qa, tech-writer (definitions in agents/<role>.md)
+  # roles:
+  #   - engineer
+  #   - engineer
+  #   - qa
+  #   - tech-writer
 
 models:
   # Per-task model overrides — takes precedence over automatic complexity routing.
@@ -30,6 +38,10 @@ models:
 sprint:
   # Maximum review rounds before escalating a task
   max_review_rounds: 3
+  # Token budget limits — sprint auto-pauses when either limit is hit.
+  # Human can review and resume via the dashboard.
+  # token_budget: 100000       # token limit (total input + output tokens)
+  # token_budget_usd: 5.00     # dollar limit — whichever is hit first
 
 server:
   # Visualization server port
@@ -40,9 +52,25 @@ notifications:
   # webhook: https://hooks.slack.com/services/T00/B00/xxx
   #
   # Events to send (default: all). Options:
-  #   sprint_started, task_escalated, task_completed, sprint_complete, checkpoint_hit
-  # events: [task_escalated, sprint_complete]
+  #   sprint_started, task_escalated, task_completed, sprint_complete, checkpoint_hit,
+  #   token_budget_exceeded
+  # events: [task_escalated, sprint_complete, token_budget_exceeded]
   #
   # Optional custom headers
   # headers:
   #   Authorization: "Bearer your-token"
+
+plugins:
+  # JS/TS plugin modules to load at startup. Supports relative paths and npm packages.
+  # Plugins can also be auto-discovered from .teamclaude/plugins/*.js
+  #
+  # - ./my-plugin.js
+  # - teamclaude-slack-plugin
+
+github:
+  # GitHub integration — opt-in. Creates issues for sprint tasks on sprint start,
+  # and posts the retrospective + status updates as PR comments on sprint stop.
+  # Token is read from GITHUB_TOKEN env var (never stored in this file).
+  #
+  # repo: owner/repo
+  # pr_number: 42   # Optional: PR to post retro and status updates to

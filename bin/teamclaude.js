@@ -27,10 +27,16 @@ if (args.includes("--help") || args.includes("-h")) {
     teamclaude [command] [options]
 
   Commands:
-    start           Start the visualization server (default)
-    init            Scaffold agents/commands/skills into .claude/
+    start              Start the visualization server (default)
+    init               Scaffold agents/commands/skills into .claude/
+    replay <file.json> Replay a recorded sprint in the dashboard
+
   Start options:
-    --port <port>   Server port (default: 3456)
+    --port <port>      Server port (default: 3456)
+
+  Replay options:
+    --port <port>      Server port (default: 3456)
+    --speed <n>        Playback speed multiplier: 1, 2, 5, 10 (default: 1)
 
   Init options:
     --global              Install to ~/.claude/ instead of ./.claude/
@@ -207,6 +213,10 @@ if (command === "init") {
     }
 
     const sprintYmlPath = join(process.cwd(), ".sprint.yml");
+    if (existsSync(sprintYmlPath) && !force) {
+      console.error(`.sprint.yml already exists. Use --force to overwrite.`);
+      process.exit(1);
+    }
     const sprintYml = buildSprintYml(parsed);
     writeFileSync(sprintYmlPath, sprintYml, "utf-8");
 
@@ -214,7 +224,7 @@ if (command === "init") {
     const roles = Array.isArray(agents.roles) ? agents.roles : [];
     const cycles = parsed.cycles ?? "1";
 
-    console.log(`\nCreated .sprint.yml from "${templateName}" template`);
+    console.log(`\nCreated .sprint.yml from template: ${templateName}`);
     if (typeof parsed.description === "string") {
       console.log(`${parsed.description}`);
     }
@@ -292,6 +302,14 @@ if (command === "init") {
     console.log(`Sprint agents installed to ${target}/`);
     console.log("Run /sprint in Claude Code to start a sprint.");
   }
+  process.exit(0);
+}
+
+if (command === "replay") {
+  const replayArgs = args.filter((a) => a !== "replay");
+  const replayPath = join(__dirname, "..", "dist", "replay-server.js");
+  process.argv = [process.argv[0], replayPath, ...replayArgs];
+  await import(replayPath);
   process.exit(0);
 }
 

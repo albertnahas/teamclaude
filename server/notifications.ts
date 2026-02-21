@@ -9,7 +9,8 @@ export type NotificationEvent =
   | "task_escalated"
   | "task_completed"
   | "sprint_complete"
-  | "checkpoint_hit";
+  | "checkpoint_hit"
+  | "token_budget_exceeded";
 
 export interface WebhookConfig {
   url: string;
@@ -32,6 +33,7 @@ const VALID_EVENTS = new Set<string>([
   "task_completed",
   "sprint_complete",
   "checkpoint_hit",
+  "token_budget_exceeded",
 ]);
 
 function isValidUrl(url: string): boolean {
@@ -120,6 +122,7 @@ const EVENT_COLORS: Record<NotificationEvent, string> = {
   sprint_complete: "#36a64f",
   task_escalated: "#cc0000",
   checkpoint_hit: "#0088ff",
+  token_budget_exceeded: "#cc0000",
 };
 
 const EVENT_EMOJIS: Record<NotificationEvent, string> = {
@@ -128,6 +131,7 @@ const EVENT_EMOJIS: Record<NotificationEvent, string> = {
   sprint_complete: ":tada:",
   task_escalated: ":warning:",
   checkpoint_hit: ":checkered_flag:",
+  token_budget_exceeded: ":rotating_light:",
 };
 
 export function formatSlackPayload(payload: NotificationPayload): object {

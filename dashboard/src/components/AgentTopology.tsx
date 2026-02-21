@@ -10,6 +10,26 @@ interface AgentTopologyProps {
 const CENTER = { x: 140, y: 180 };
 const ORBIT_RADIUS = 110;
 
+const ROLE_COLORS: Record<string, string> = {
+  lead: "#06b6d4",        // cyan
+  manager: "#60a5fa",     // blue
+  engineer: "#4ade80",    // green
+  pm: "#c4b5fd",          // purple
+  qa: "#f472b6",          // pink
+  "tech-writer": "#fb923c", // orange
+};
+
+function roleColor(agent: AgentInfo): string {
+  const name = (agent.name + " " + agent.agentType).toLowerCase();
+  if (name.includes("tech-writer") || name.includes("techwriter")) return ROLE_COLORS["tech-writer"];
+  if (name.includes("qa")) return ROLE_COLORS.qa;
+  if (name.includes("lead")) return ROLE_COLORS.lead;
+  if (name.includes("manager")) return ROLE_COLORS.manager;
+  if (name.includes("engineer")) return ROLE_COLORS.engineer;
+  if (name.includes("pm") || name.includes("product")) return ROLE_COLORS.pm;
+  return ROLE_COLORS.lead;
+}
+
 function agentPosition(index: number, total: number) {
   if (total === 1) return CENTER;
   const angle = (index / total) * 2 * Math.PI - Math.PI / 2;
@@ -36,8 +56,9 @@ function AgentNode({
   const { x, y } = agentPosition(index, total);
   const clickable = tmuxAvailable && !!onClick;
 
+  const color = roleColor(agent);
   const statusColor =
-    isActive ? "var(--accent)" : agent.status === "idle" ? "var(--border)" : "var(--text-muted)";
+    isActive ? color : agent.status === "idle" ? "var(--border)" : "var(--text-muted)";
 
   const label =
     agent.name.length > 12 ? agent.name.slice(0, 11) + "…" : agent.name;
@@ -68,7 +89,7 @@ function AgentNode({
           cy={y}
           r={36}
           fill="none"
-          stroke="var(--accent)"
+          stroke={color}
           strokeWidth={1}
           opacity={0.35}
           className="pulse-ring"

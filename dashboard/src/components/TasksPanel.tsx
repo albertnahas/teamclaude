@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { TaskInfo, ModelRoutingDecision } from "../types";
-import { MODEL_LABEL } from "../types";
+import { MODEL_COST, MODEL_LABEL } from "../types";
 
 interface TasksPanelProps {
   tasks: TaskInfo[];
   reviewTaskIds: string[];
+  searchInputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
 const STATUS_COLORS: Record<TaskInfo["status"], string> = {
@@ -27,13 +28,11 @@ const KANBAN_COLS = [
   { key: "completed", label: "Done", color: "var(--green)" },
 ] as const;
 
-// Cost per 1K tokens
-const MODEL_INPUT_PER_1K: Record<string, number> = {
-  "claude-haiku-4-5-20251001": 0.0008,
-  "claude-sonnet-4-6": 0.008,
-  "claude-opus-4-6": 0.08,
-};
-const OPUS_INPUT_PER_1K = 0.08;
+// Derive per-1K cost from canonical MODEL_COST (USD per MTok → per 1K = divide by 1000)
+const MODEL_INPUT_PER_1K: Record<string, number> = Object.fromEntries(
+  Object.entries(MODEL_COST).map(([model, c]) => [model, c.input / 1000])
+);
+const OPUS_INPUT_PER_1K = (MODEL_COST["claude-opus-4-6"]?.input ?? 15) / 1000;
 const AVG_TOKENS_PER_TASK = 2000;
 
 function ModelBadge({ decision }: { decision: ModelRoutingDecision }) {
@@ -195,13 +194,39 @@ function KanbanCard({
   );
 }
 
-export function TasksPanel({ tasks, reviewTaskIds }: TasksPanelProps) {
+type StatusFilter = "all" | "pending" | "in_progress" | "completed";
+
+const STATUS_FILTER_LABELS: Record<StatusFilter, string> = {
+  all: "All",
+  pending: "Pending",
+  in_progress: "In Progress",
+  completed: "Done",
+};
+
+export function TasksPanel({ tasks, reviewTaskIds, searchInputRef }: TasksPanelProps) {
   const [view, setView] = useState<"list" | "board">("list");
   const [taskModels, setTaskModels] = useState<Record<string, ModelRoutingDecision>>({});
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const internalRef = useRef<HTMLInputElement>(null);
+  const inputRef = (searchInputRef ?? internalRef) as React.RefObject<HTMLInputElement>;
+
   const reviewSet = new Set(reviewTaskIds);
   const visible = tasks.filter((t) => t.status !== "deleted");
   const completedIds = new Set(visible.filter((t) => t.status === "completed").map((t) => t.id));
   const done = completedIds.size;
+
+  const lowerQuery = query.toLowerCase();
+  const filtered = visible.filter((t) => {
+    const matchesQuery =
+      !query ||
+      t.subject.toLowerCase().includes(lowerQuery) ||
+      (t.description?.toLowerCase().includes(lowerQuery) ?? false);
+    const matchesStatus =
+      statusFilter === "all" ||
+      t.status === statusFilter;
+    return matchesQuery && matchesStatus;
+  });
 
   useEffect(() => {
     if (tasks.length === 0) return;
@@ -210,6 +235,11 @@ export function TasksPanel({ tasks, reviewTaskIds }: TasksPanelProps) {
       .then((data) => setTaskModels(data as Record<string, ModelRoutingDecision>))
       .catch(() => {});
   }, [tasks.length]);
+
+  function countForStatus(s: StatusFilter) {
+    if (s === "all") return visible.length;
+    return visible.filter((t) => t.status === s).length;
+  }
 
   return (
     <div className="panel tasks-panel" style={{ display: "flex", flexDirection: "column" }}>
@@ -228,13 +258,41 @@ export function TasksPanel({ tasks, reviewTaskIds }: TasksPanelProps) {
         </button>
       </div>
 
+      {visible.length > 0 && (
+        <div className="task-search-bar">
+          <input
+            ref={inputRef}
+            type="text"
+            className="task-search-input"
+            placeholder="Search tasks..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Escape") setQuery(""); }}
+          />
+          <div className="task-filter-pills">
+            {(Object.keys(STATUS_FILTER_LABELS) as StatusFilter[]).map((s) => (
+              <button
+                key={s}
+                className={`task-filter-pill ${statusFilter === s ? "active" : ""}`}
+                onClick={() => setStatusFilter(s)}
+              >
+                {STATUS_FILTER_LABELS[s]}
+                <span className="task-filter-count">{countForStatus(s)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div style={{ flex: 1, overflow: "hidden" }}>
         {view === "list" ? (
           <div className="tasks-list">
             {visible.length === 0 ? (
               <div className="empty-state">Waiting for sprint to start...</div>
+            ) : filtered.length === 0 ? (
+              <div className="empty-state">No tasks match the filter</div>
             ) : (
-              visible.map((task) => (
+              filtered.map((task) => (
                 <TaskRow
                   key={task.id}
                   task={task}
@@ -248,10 +306,17 @@ export function TasksPanel({ tasks, reviewTaskIds }: TasksPanelProps) {
         ) : (
           <div className="tasks-list board">
             {KANBAN_COLS.map((col) => {
-              const colTasks =
+              const allColTasks =
                 col.key === "review"
                   ? visible.filter((t) => reviewSet.has(t.id))
                   : visible.filter((t) => t.status === col.key && !reviewSet.has(t.id));
+              const colTasks = allColTasks.filter((t) => {
+                if (!query) return true;
+                return (
+                  t.subject.toLowerCase().includes(lowerQuery) ||
+                  (t.description?.toLowerCase().includes(lowerQuery) ?? false)
+                );
+              });
               return (
                 <div key={col.key} className="kanban-col">
                   <div className="kanban-hdr">

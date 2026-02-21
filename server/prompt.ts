@@ -1,4 +1,62 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import type { RoleLearnings } from "./learnings.js";
+import { formatMemoriesForPrompt } from "./memory.js";
+
+// --- Custom role support ---
+
+/**
+ * Load the `agents.roles` array from `.sprint.yml`.
+ * Returns null when not configured (caller falls back to numeric engineers param).
+ */
+export function loadCustomRoles(cwd: string = process.cwd()): string[] | null {
+  const sprintYml = join(cwd, ".sprint.yml");
+  if (!existsSync(sprintYml)) return null;
+
+  let raw: string;
+  try {
+    raw = readFileSync(sprintYml, "utf-8");
+  } catch {
+    return null;
+  }
+
+  // Match the agents.roles block
+  const agentsMatch = raw.match(/^agents\s*:\s*\n((?:[ \t]+\S[^\n]*\n?)*)/m);
+  if (!agentsMatch) return null;
+
+  const block = agentsMatch[1];
+  const rolesBlockMatch = block.match(/[ \t]+roles\s*:\s*\n((?:[ \t]+-\s*.+\n?)*)/);
+  if (!rolesBlockMatch) return null;
+
+  const roles = rolesBlockMatch[1]
+    .split("\n")
+    .map((line) => line.replace(/^[ \t]+-\s*/, "").trim().replace(/^["']|["']$/g, ""))
+    .filter(Boolean);
+
+  return roles.length > 0 ? roles : null;
+}
+
+/**
+ * Load agent definition markdown from `agents/<role>.md` relative to projectRoot.
+ * Returns the body content (below the YAML frontmatter) if found, null otherwise.
+ */
+export function loadAgentDefinition(role: string, projectRoot: string = process.cwd()): string | null {
+  // Normalize: "qa" → "qa", "sprint-qa" → "qa", "tech-writer" → "tech-writer"
+  const normalized = role.replace(/^sprint-/, "");
+  const agentPath = resolve(projectRoot, "agents", `${normalized}.md`);
+  if (!existsSync(agentPath)) return null;
+
+  try {
+    const raw = readFileSync(agentPath, "utf-8");
+    // Strip YAML frontmatter (--- ... ---)
+    const bodyMatch = raw.match(/^---\n[\s\S]*?---\n([\s\S]*)$/);
+    return bodyMatch ? bodyMatch[1].trim() : raw.trim();
+  } catch {
+    return null;
+  }
+}
+
+// --- Helpers ---
 
 function learningsSection(label: string, content: string): string {
   if (!content) return "";
@@ -19,15 +77,52 @@ Examples:
   PROCESS_LEARNING: engineer — Code was submitted without running the type checker
   PROCESS_LEARNING: manager — I approved too quickly without verifying test output`;
 
+// --- Custom role prompt builder ---
+
+/**
+ * Build a prompt section for a custom role agent.
+ * Falls back to the engineer prompt format if no agent definition file exists.
+ */
+function customRolePrompt(
+  role: string,
+  name: string,
+  teamName: string,
+  projectRoot: string,
+  engLearnings: string
+): string {
+  const definition = loadAgentDefinition(role, projectRoot);
+  if (definition) {
+    return `${definition}\n\nYou are "${name}" for team "${teamName}".${engLearnings}`;
+  }
+
+  // Generic fallback for unknown roles
+  return `You are "${name}" (${role}) for team "${teamName}".${engLearnings}
+
+Your workflow:
+1. Wait for "TASK_ASSIGNED: #id" messages from sprint-manager
+2. Before writing anything, search the codebase for relevant existing code and patterns
+3. Complete the assigned task using your specialized skills
+4. Verify your work
+5. Send "READY_FOR_REVIEW: #id — summary of changes" to sprint-manager
+
+IMPORTANT:
+- Do NOT call TaskUpdate to set status to "completed" yourself
+- Always verify your work before submitting for review`;
+}
+
+// --- Public API ---
+
 export function compileSprintPrompt(
   roadmap: string,
   engineers: number,
   includePM: boolean,
   cycles: number,
-  learnings?: RoleLearnings
+  learnings?: RoleLearnings,
+  roles?: string[],
+  projectRoot: string = process.cwd()
 ): string {
   const teamName = `sprint-${Date.now()}`;
-  const autoEngineers = engineers === 0;
+  const autoEngineers = engineers === 0 && !roles?.length;
 
   let prompt = `You are orchestrating a sprint. A visualization server is already running — do NOT start one.
 
@@ -43,14 +138,45 @@ ${learnings!.orchestrator}
 `;
   }
 
-  const engineerNames = autoEngineers
-    ? []
-    : engineers === 1
-      ? ["sprint-engineer"]
-      : Array.from({ length: engineers }, (_, i) => `sprint-engineer-${i + 1}`);
+  // Resolve agent names: custom roles take precedence over numeric engineers
+  const agentNames: { name: string; role: string }[] = [];
+
+  if (roles && roles.length > 0) {
+    // Count occurrences of each role to determine numbering
+    const roleCounts = new Map<string, number>();
+    const roleInstances = new Map<string, number>();
+
+    for (const r of roles) {
+      roleCounts.set(r, (roleCounts.get(r) ?? 0) + 1);
+    }
+
+    for (const r of roles) {
+      const count = roleCounts.get(r)!;
+      const instance = (roleInstances.get(r) ?? 0) + 1;
+      roleInstances.set(r, instance);
+
+      // If only one of this role, use plain name; if multiple, number them
+      const baseName = r.startsWith("sprint-") ? r : `sprint-${r}`;
+      const name = count === 1 ? baseName : `${baseName}-${instance}`;
+      agentNames.push({ name, role: r });
+    }
+  } else if (!autoEngineers) {
+    const names =
+      engineers === 1
+        ? ["sprint-engineer"]
+        : Array.from({ length: engineers }, (_, i) => `sprint-engineer-${i + 1}`);
+    for (const n of names) agentNames.push({ name: n, role: "engineer" });
+  }
+
+  const engineerNames = agentNames.map((a) => a.name);
+
+  // Load persistent memories for each role
+  const pmMemories = formatMemoriesForPrompt(projectRoot, "pm");
+  const mgrMemories = formatMemoriesForPrompt(projectRoot, "manager");
+  const engMemories = formatMemoriesForPrompt(projectRoot, "engineer");
 
   const pmLearnings = learnings?.pm ? learningsSection("apply these improvements to task planning", learnings.pm) : "";
-  const pmPrompt = `You are the PM for team "${teamName}".${roadmap.trim() ? `\n\nUser guidance:\n${roadmap}` : ""}${pmLearnings}
+  const pmPrompt = `You are the PM for team "${teamName}".${roadmap.trim() ? `\n\nUser guidance:\n${roadmap}` : ""}${pmLearnings}${pmMemories}
 
 Your workflow:
 1. Analyze the codebase to understand existing patterns, architecture, and conventions
@@ -64,65 +190,90 @@ Your workflow:
 CRITICAL: You MUST call TaskCreate for every task. The visualization dashboard reads from TaskCreate — messages alone will NOT appear on the board.
 IMPORTANT: Each task description MUST include acceptance criteria. Example: "Done when: tests pass, endpoint returns 200, no type errors."`;
 
-  const engineerList = engineerNames.length > 0
-    ? `Available engineers: ${engineerNames.join(", ")}.`
+  const agentListStr = engineerNames.length > 0
+    ? `Available agents: ${engineerNames.join(", ")}.`
     : "";
   const distributionRule = engineerNames.length > 1
-    ? `\nIMPORTANT: Distribute tasks evenly across ALL engineers using round-robin. Do NOT assign all tasks to one engineer.`
+    ? `\nIMPORTANT: Distribute tasks evenly across ALL agents using round-robin. Do NOT assign all tasks to one agent.`
     : "";
   const mgrLearnings = learnings?.manager ? learningsSection("apply these improvements to review and coordination", learnings.manager) : "";
 
   const mgrPromptAuto = `You are the Manager for team "${teamName}".
-${engineerList}${mgrLearnings}
+${agentListStr}${mgrLearnings}${mgrMemories}
 
 Your workflow:
 1. Wait for the PM's "ROADMAP_READY" message
 2. Call TaskList to see all created tasks
-3. For each task: call TaskUpdate to set owner to an engineer name, then send "TASK_ASSIGNED: #id — subject" to that engineer
-4. When an engineer sends "READY_FOR_REVIEW: #id", review their work thoroughly:
-   - Verify the implementation matches the task description and acceptance criteria
-   - Check that tests pass and type-checking is clean
-   - Look for dead code, unused imports, or duplicate implementations
-   - Verify no files were created that duplicate existing functionality
+3. For each task: call TaskUpdate to set owner to an agent name, then send "TASK_ASSIGNED: #id — subject" to that agent
+4. When an agent sends "READY_FOR_REVIEW: #id", review using the checklist below
 5. Send "APPROVED: #id" or "REQUEST_CHANGES: #id — specific feedback" back
 6. When ALL tasks have status completed, send "SPRINT_COMPLETE" to team-lead
 ${distributionRule}
+
+## Review checklist (check ALL before APPROVED)
+- [ ] Implementation matches the task description and acceptance criteria
+- [ ] Type-check passes and all tests pass
+- [ ] No dead code, unused imports, or duplicate implementations
+- [ ] No files created that duplicate existing functionality
+- [ ] If UI components were created/changed: verify CSS exists for every new className. Grep the stylesheet for the class — if missing, REQUEST_CHANGES.
+- [ ] If UI components were created/changed: build succeeds (dashboard compiles)
+- [ ] If constants or config values were added: search for duplicates across the codebase. Single source of truth — no duplicate pricing tables, no duplicate type definitions.
+- [ ] If tests were added: verify mocks cover all imported modules. Tests must not make real disk/network calls. Check for proper afterEach cleanup of shared state.
+- [ ] If data values were added (prices, thresholds, etc.): verify they are factually correct. Do not trust AI-generated numbers.
+
 CRITICAL: Use TaskUpdate for all status changes. Use TaskList to monitor progress.
-IMPORTANT: Only send APPROVED when you have verified the work is correct. REQUEST_CHANGES with specific feedback is better than approving broken code.
+IMPORTANT: Only send APPROVED when you have verified the work is correct. REQUEST_CHANGES with specific feedback is better than approving broken code. Read the actual files changed — do not approve based solely on test pass/fail.
 ${REFLECTION_INSTRUCTION}`;
 
   const mgrPromptManual = `You are the Manager for team "${teamName}".
-${engineerList}${mgrLearnings}
+${agentListStr}${mgrLearnings}${mgrMemories}
 
 Your workflow:
 1. Call TaskList to see all created tasks
-2. For each task: call TaskUpdate to set owner to an engineer name, then send "TASK_ASSIGNED: #id — subject" to that engineer
-3. When an engineer sends "READY_FOR_REVIEW: #id", review their work thoroughly:
-   - Verify the implementation matches the task description and acceptance criteria
-   - Check that tests pass and type-checking is clean
-   - Look for dead code, unused imports, or duplicate implementations
-   - Verify no files were created that duplicate existing functionality
+2. For each task: call TaskUpdate to set owner to an agent name, then send "TASK_ASSIGNED: #id — subject" to that agent
+3. When an agent sends "READY_FOR_REVIEW: #id", review using the checklist below
 4. Send "APPROVED: #id" or "REQUEST_CHANGES: #id — specific feedback" back
 5. When ALL tasks have status completed, send "SPRINT_COMPLETE" to team-lead
 ${distributionRule}
+
+## Review checklist (check ALL before APPROVED)
+- [ ] Implementation matches the task description and acceptance criteria
+- [ ] Type-check passes and all tests pass
+- [ ] No dead code, unused imports, or duplicate implementations
+- [ ] No files created that duplicate existing functionality
+- [ ] If UI components were created/changed: verify CSS exists for every new className. Grep the stylesheet for the class — if missing, REQUEST_CHANGES.
+- [ ] If UI components were created/changed: build succeeds (dashboard compiles)
+- [ ] If constants or config values were added: search for duplicates across the codebase. Single source of truth — no duplicate pricing tables, no duplicate type definitions.
+- [ ] If tests were added: verify mocks cover all imported modules. Tests must not make real disk/network calls. Check for proper afterEach cleanup of shared state.
+- [ ] If data values were added (prices, thresholds, etc.): verify they are factually correct. Do not trust AI-generated numbers.
+
 CRITICAL: Use TaskUpdate for all status changes. Use TaskList to monitor progress.
-IMPORTANT: Only send APPROVED when you have verified the work is correct. REQUEST_CHANGES with specific feedback is better than approving broken code.
+IMPORTANT: Only send APPROVED when you have verified the work is correct. REQUEST_CHANGES with specific feedback is better than approving broken code. Read the actual files changed — do not approve based solely on test pass/fail.
 ${REFLECTION_INSTRUCTION}`;
 
   const engLearnings = learnings?.engineer ? learningsSection("apply these improvements to implementation", learnings.engineer) : "";
-  const engPrompt = (name: string) => `You are engineer "${name}" for team "${teamName}".${engLearnings}
+  const engPrompt = (name: string) => `You are engineer "${name}" for team "${teamName}".${engLearnings}${engMemories}
 
 Your workflow:
 1. Wait for "TASK_ASSIGNED: #id" messages from sprint-manager
 2. Before writing new code, search the codebase for existing patterns, utilities, and components you can reuse. Do NOT create duplicates of existing functionality.
 3. Implement the assigned task
-4. Run the project's test/type-check commands to verify your changes work. Fix any failures before submitting.
+4. Run the pre-submit checklist below
 5. Clean up: remove any dead code, unused imports, or temporary scaffolding you created
 6. Send "READY_FOR_REVIEW: #id — summary of changes" to sprint-manager
 
+## Pre-submit checklist (run ALL before READY_FOR_REVIEW)
+- [ ] Type-check passes clean
+- [ ] All tests pass (existing + new)
+- [ ] If you created/modified UI components: CSS exists for every className used. Check the stylesheet — if a class is missing, add it with proper styling matching existing theme.
+- [ ] If you created/modified UI components: build succeeds (the dashboard compiles to a single bundle)
+- [ ] If you added constants or config values: search the codebase first for existing definitions. Never duplicate data that exists elsewhere — import it.
+- [ ] If you wrote tests: every external dependency is mocked. Tests must not read from disk, make network calls, or share mutable singletons across test files. Use afterEach cleanup for any shared state.
+- [ ] If you used React hooks with object/function parameters: stabilize references with useRef or useMemo. Never pass inline object literals as useEffect dependencies.
+- [ ] Race conditions: if code uses callbacks that null-ify shared state (event handlers, async completions), capture values in local variables before registering callbacks.
+
 IMPORTANT:
 - Do NOT call TaskUpdate to set status to "completed" yourself. The system marks tasks completed when the manager approves.
-- Always run tests before submitting for review. If the project has type-checking, run that too.
 - Prefer editing existing files over creating new ones. Reuse existing patterns and abstractions.`;
 
   if (includePM) {
@@ -150,12 +301,17 @@ Engineer prompt template:
 ${engPrompt("sprint-engineer-N")}
 """`;
     } else {
-      for (const name of engineerNames) {
+      for (const { name, role } of agentNames) {
+        const isEngineer = role === "engineer" || role === "sprint-engineer";
+        const agentType = isEngineer ? "sprint-engineer" : `sprint-${role.replace(/^sprint-/, "")}`;
+        const agentPrompt = isEngineer
+          ? engPrompt(name)
+          : customRolePrompt(role, name, teamName, projectRoot, engLearnings);
         prompt += `
-### ${name} (subagent_type: sprint-engineer)
+### ${name} (subagent_type: ${agentType})
 Prompt:
 """
-${engPrompt(name)}
+${agentPrompt}
 """
 `;
       }
@@ -192,12 +348,17 @@ Engineer prompt template:
 ${engPrompt("sprint-engineer-N")}
 """`;
     } else {
-      for (const name of engineerNames) {
+      for (const { name, role } of agentNames) {
+        const isEngineer = role === "engineer" || role === "sprint-engineer";
+        const agentType = isEngineer ? "sprint-engineer" : `sprint-${role.replace(/^sprint-/, "")}`;
+        const agentPrompt = isEngineer
+          ? engPrompt(name)
+          : customRolePrompt(role, name, teamName, projectRoot, engLearnings);
         prompt += `
-### ${name} (subagent_type: sprint-engineer, name: ${name})
+### ${name} (subagent_type: ${agentType}, name: ${name})
 Prompt:
 """
-${engPrompt(name)}
+${agentPrompt}
 """
 `;
       }

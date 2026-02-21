@@ -1,0 +1,35 @@
+name: Agent role proposal
+description: Propose a new built-in agent role
+labels: [agent-role]
+body:
+  - type: input
+    id: role-name
+    attributes:
+      label: Role name
+      placeholder: "e.g. devops, security-auditor, tech-writer"
+    validations:
+      required: true
+  - type: textarea
+    id: responsibilities
+    attributes:
+      label: Responsibilities
+      description: What does this agent do? What is its scope?
+    validations:
+      required: true
+  - type: textarea
+    id: protocols
+    attributes:
+      label: Protocol messages
+      description: What protocol messages does it send and receive?
+      placeholder: |
+        Sends: READY_FOR_REVIEW, ESCALATE
+        Receives: TASK_ASSIGNED, REQUEST_CHANGES
+    validations:
+      required: true
+  - type: textarea
+    id: use-case
+    attributes:
+      label: When would you use this role?
+      description: Describe a concrete scenario where this role adds value.
+    validations:
+      required: true

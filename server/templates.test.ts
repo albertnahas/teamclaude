@@ -146,9 +146,8 @@ describe("CLI --template list", () => {
 });
 
 describe("CLI --template <name> (valid)", () => {
-  const outDir = join(tmpBase, "valid");
-
   it("exits 0 and prints roadmap for bug-bash", () => {
+    const outDir = join(tmpBase, "valid-bug-bash");
     mkdirSync(outDir, { recursive: true });
     const { stdout, code } = runCli(["init", "--template", "bug-bash"], { cwd: outDir });
     expect(code).toBe(0);
@@ -157,12 +156,14 @@ describe("CLI --template <name> (valid)", () => {
   });
 
   it("creates .sprint.yml in cwd", () => {
+    const outDir = join(tmpBase, "valid-refactor");
     mkdirSync(outDir, { recursive: true });
     runCli(["init", "--template", "refactor"], { cwd: outDir });
     expect(existsSync(join(outDir, ".sprint.yml"))).toBe(true);
   });
 
   it(".sprint.yml contains agent model from template", () => {
+    const outDir = join(tmpBase, "valid-security-audit");
     mkdirSync(outDir, { recursive: true });
     runCli(["init", "--template", "security-audit"], { cwd: outDir });
     const content = readFileSync(join(outDir, ".sprint.yml"), "utf-8");
@@ -170,12 +171,14 @@ describe("CLI --template <name> (valid)", () => {
   });
 
   it("prints cycles count for feature template", () => {
+    const outDir = join(tmpBase, "valid-feature");
     mkdirSync(outDir, { recursive: true });
     const { stdout } = runCli(["init", "--template", "feature"], { cwd: outDir });
     expect(stdout).toMatch(/Cycles:\s*2/);
   });
 
   it("prints agent roles in output", () => {
+    const outDir = join(tmpBase, "valid-roles");
     mkdirSync(outDir, { recursive: true });
     const { stdout } = runCli(["init", "--template", "bug-bash"], { cwd: outDir });
     expect(stdout).toMatch(/engineer/i);

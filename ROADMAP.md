@@ -183,8 +183,8 @@ Production-grade for teams and enterprises.
 |---------|--------|-------|--------|
 | **v0.2** | Foundation | Persistence, tests, CI, modularity, contributor docs | ✅ Done (modularity + contributor docs remaining) |
 | **v0.3** | Core Gaps | Git worktrees, model routing, planning assistant, extracted dashboard | ✅ Done |
-| **v0.4** | Ecosystem | Custom roles, templates, plugin API, example sprints | ⚠️ In Progress (templates done, plugin API + replay remaining) |
-| **v0.5** | Integration | GitHub, shareable retros, history browser, notifications | ⚠️ In Progress (history done, GitHub + webhooks remaining) |
+| **v0.4** | Ecosystem | Custom roles, templates, plugin API, example sprints | ✅ Done |
+| **v0.5** | Integration | GitHub, shareable retros, history browser, notifications | ✅ Done |
 | **v1.0** | Scale | Multi-engineer, persistent memory, remote agents, multi-provider | ⚠️ In Progress (multi-engineer done, memory + remote remaining) |
 
 ---

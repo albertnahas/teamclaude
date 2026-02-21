@@ -1,7 +1,8 @@
-import { useCallback, useReducer, useState } from "react";
+import { useCallback, useReducer, useRef, useState } from "react";
 import type { SprintState, WsEvent, AppPhase, MergeConflict } from "./types";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useTheme } from "./hooks/useTheme";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { SetupPhase } from "./components/SetupPhase";
 import { PlanningPhase } from "./components/PlanningPhase";
 import { SprintBar } from "./components/SprintBar";
@@ -12,6 +13,7 @@ import { TerminalView } from "./components/TerminalView";
 import { CheckpointModal } from "./components/CheckpointModal";
 import { RetroModal } from "./components/RetroModal";
 import { EscalationBar } from "./components/EscalationBar";
+import { ReplayControls } from "./components/ReplayControls";
 
 const initialState: SprintState = {
   teamName: null,
@@ -42,6 +44,63 @@ interface TerminalLine {
 interface TerminalAppState {
   lines: TerminalLine[];
   panes: { agentName: string | null; paneIndex: number }[];
+}
+
+function TokenBudgetWarning({ level, onDismiss }: { level: "approaching" | "exceeded"; onDismiss: () => void }) {
+  const exceeded = level === "exceeded";
+  const bg = exceeded ? "#7f1d1d" : "#78350f";
+  const textColor = exceeded ? "#fca5a5" : "#fcd34d";
+  const strongColor = exceeded ? "#f87171" : "#fbbf24";
+  const borderColor = exceeded ? "#f87171" : "#fbbf24";
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        padding: "10px 20px",
+        background: bg,
+        color: textColor,
+        fontSize: 13,
+        zIndex: 210,
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        animation: "slideDown 0.3s ease-out",
+      }}
+    >
+      <span style={{ fontSize: 16, flexShrink: 0 }}>!</span>
+      <span style={{ flex: 1 }}>
+        {exceeded ? (
+          <>
+            <strong style={{ color: strongColor }}>Token budget exceeded</strong>
+            {" — sprint paused. Review usage and resume when ready."}
+          </>
+        ) : (
+          <>
+            <strong style={{ color: strongColor }}>Token budget approaching limit</strong>
+            {" — over 80% of budget used."}
+          </>
+        )}
+      </span>
+      <button
+        onClick={onDismiss}
+        style={{
+          background: "transparent",
+          border: `1px solid ${borderColor}`,
+          color: borderColor,
+          borderRadius: 4,
+          padding: "2px 10px",
+          cursor: "pointer",
+          fontSize: 12,
+        }}
+      >
+        Dismiss
+      </button>
+    </div>
+  );
 }
 
 function MergeConflictBar({ conflict }: { conflict: MergeConflict }) {
@@ -107,6 +166,10 @@ function sprintReducer(state: SprintState, event: WsEvent): SprintState {
       return { ...state, tokenUsage: event.usage };
     case "checkpoint":
       return { ...state, pendingCheckpoint: event.checkpoint };
+    case "token_budget_approaching":
+      return { ...state, tokenBudgetApproaching: true, tokenUsage: event.usage };
+    case "token_budget_exceeded":
+      return { ...state, tokenBudgetApproaching: true, tokenBudgetExceeded: true, paused: true, tokenUsage: event.usage };
     default:
       return state;
   }
@@ -125,14 +188,37 @@ export default function App() {
   const [terminalState, setTerminalState] = useState<TerminalAppState>({ lines: [], panes: [] });
   const [openTerminalAgent, setOpenTerminalAgent] = useState<string | null>(null);
   const { theme, toggleTheme } = useTheme();
+  const [budgetWarningDismissed, setBudgetWarningDismissed] = useState(false);
+  const [replaySpeed, setReplaySpeed] = useState(10);
+  const [replayComplete, setReplayComplete] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const replayEventCount = useRef(0);
+  const replayTotalEvents = useRef(0);
+  const taskSearchRef = useRef<HTMLInputElement>(null);
 
   const handleWsEvent = useCallback((event: WsEvent) => {
+    if (event.type === "replay_complete") {
+      setReplayComplete(true);
+      return;
+    }
+    if (event.type === "replay_start") {
+      replayTotalEvents.current = event.totalEvents;
+      replayEventCount.current = 0;
+      return;
+    }
     dispatch(event);
-    if (event.type === "init" && event.state.phase !== "idle") {
-      setAppPhase("sprint");
+    replayEventCount.current += 1;
+    if (event.type === "init") {
+      if (event.state.teamName) setAppPhase("replay");
+      else if (event.state.phase !== "idle") setAppPhase("sprint");
+      // Reset budget warning when state is re-initialized
+      if (!event.state.tokenBudgetApproaching && !event.state.tokenBudgetExceeded) setBudgetWarningDismissed(false);
+    }
+    if (event.type === "token_budget_approaching" || event.type === "token_budget_exceeded") {
+      setBudgetWarningDismissed(false);
     }
     if (event.type === "cycle_info" && event.phase !== "idle") {
-      setAppPhase("sprint");
+      if (appPhase !== "replay") setAppPhase("sprint");
     }
     if (event.type === "terminal_output") {
       setTerminalState((prev) => ({
@@ -146,7 +232,7 @@ export default function App() {
     if (event.type === "panes_discovered") {
       setTerminalState((prev) => ({ ...prev, panes: event.panes }));
     }
-  }, []);
+  }, [appPhase]);
 
   useWebSocket(handleWsEvent);
 
@@ -206,6 +292,13 @@ export default function App() {
     setAppPhase("setup");
   };
 
+  useKeyboardShortcuts({
+    "?": () => setShowShortcuts((s) => !s),
+    "p": handlePause,
+    "Escape": () => setShowShortcuts(false),
+    "t": () => { taskSearchRef.current?.focus(); taskSearchRef.current?.select(); },
+  });
+
   if (appPhase === "setup") {
     return <SetupPhase onLaunch={handleLaunch} theme={theme} onToggleTheme={toggleTheme} />;
   }
@@ -221,8 +314,34 @@ export default function App() {
     );
   }
 
+  const handleReplayRestart = () => {
+    setReplayComplete(false);
+    replayEventCount.current = 0;
+    replayTotalEvents.current = 0;
+    // Reconnect WebSocket to restart replay from server side
+    window.location.reload();
+  };
+
   return (
     <div id="sprint-phase">
+      {appPhase === "replay" && (
+        <ReplayControls
+          totalEvents={replayTotalEvents.current}
+          currentEvent={replayEventCount.current}
+          speed={replaySpeed}
+          complete={replayComplete}
+          onSpeedChange={setReplaySpeed}
+          onRestart={handleReplayRestart}
+        />
+      )}
+
+      {(sprintState.tokenBudgetExceeded || sprintState.tokenBudgetApproaching) && !budgetWarningDismissed && (
+        <TokenBudgetWarning
+          level={sprintState.tokenBudgetExceeded ? "exceeded" : "approaching"}
+          onDismiss={() => setBudgetWarningDismissed(true)}
+        />
+      )}
+
       {sprintState.escalation && (
         <EscalationBar
           escalation={sprintState.escalation}
@@ -234,7 +353,14 @@ export default function App() {
         <MergeConflictBar conflict={sprintState.mergeConflict} />
       )}
 
-      <SprintBar state={sprintState} theme={theme} onPause={handlePause} onStop={handleStop} onToggleTheme={toggleTheme} />
+      <SprintBar
+        state={sprintState}
+        theme={theme}
+        onPause={handlePause}
+        onStop={handleStop}
+        onToggleTheme={toggleTheme}
+        onShowShortcuts={() => setShowShortcuts((s) => !s)}
+      />
 
       <div className="container">
         <div className="panel agents-panel" style={{ overflow: "hidden" }}>
@@ -258,7 +384,11 @@ export default function App() {
 
         <div className="resize-h" />
 
-        <TasksPanel tasks={sprintState.tasks} reviewTaskIds={sprintState.reviewTaskIds} />
+        <TasksPanel
+          tasks={sprintState.tasks}
+          reviewTaskIds={sprintState.reviewTaskIds}
+          searchInputRef={taskSearchRef}
+        />
 
         <div className="resize-v" />
 
@@ -274,6 +404,80 @@ export default function App() {
       )}
 
       {retroData && <RetroModal data={retroData} onClose={handleRetroClose} />}
+
+      {showShortcuts && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            zIndex: 300,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+          onClick={() => setShowShortcuts(false)}
+        >
+          <div
+            style={{
+              background: "var(--bg-panel)",
+              border: "1px solid var(--border-subtle)",
+              borderRadius: 8,
+              padding: "24px 32px",
+              minWidth: 300,
+              boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontWeight: 600, marginBottom: 16, fontSize: 14 }}>Keyboard Shortcuts</div>
+            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
+              <tbody>
+                {[
+                  ["?", "Toggle this help overlay"],
+                  ["p", "Pause / Resume sprint"],
+                  ["t", "Focus task search"],
+                  ["Esc", "Close overlay"],
+                ].map(([key, desc]) => (
+                  <tr key={key}>
+                    <td style={{ paddingRight: 20, paddingBottom: 10 }}>
+                      <kbd
+                        style={{
+                          fontFamily: "var(--font-mono)",
+                          fontSize: 11,
+                          background: "var(--bg-surface)",
+                          border: "1px solid var(--border-subtle)",
+                          borderRadius: 4,
+                          padding: "2px 8px",
+                          color: "var(--text-primary)",
+                        }}
+                      >
+                        {key}
+                      </kbd>
+                    </td>
+                    <td style={{ color: "var(--text-secondary)", paddingBottom: 10 }}>{desc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <button
+              onClick={() => setShowShortcuts(false)}
+              style={{
+                marginTop: 8,
+                width: "100%",
+                padding: "6px 0",
+                background: "transparent",
+                border: "1px solid var(--border-subtle)",
+                borderRadius: 4,
+                color: "var(--text-secondary)",
+                cursor: "pointer",
+                fontSize: 12,
+              }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

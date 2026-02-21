@@ -7,9 +7,9 @@ export interface ModelRoutingDecision {
   reason: string;
 }
 
-// Cost per million tokens (MTok) — mirrors server/watcher.ts MODEL_PRICING
+// Cost per million tokens (MTok). Source: https://www.anthropic.com/pricing (Feb 2025)
 export const MODEL_COST: Record<string, { input: number; output: number }> = {
-  "claude-haiku-4-5-20251001": { input: 0.80, output: 4 },
+  "claude-haiku-4-5-20251001": { input: 0.25, output: 1.25 },
   "claude-sonnet-4-6":         { input: 3,    output: 15 },
   "claude-opus-4-6":           { input: 15,   output: 75 },
 };
@@ -82,6 +82,8 @@ export interface SprintState {
   pendingCheckpoint: { taskId: string; taskSubject: string } | null;
   tmuxAvailable: boolean;
   tmuxSessionName: string | null;
+  tokenBudgetApproaching?: boolean;
+  tokenBudgetExceeded?: boolean;
   webhookStatus?: {
     lastEvent?: string;
     lastStatus?: "success" | "error";
@@ -111,6 +113,10 @@ export type WsEvent =
   | { type: "process_exited"; code: number | null }
   | { type: "terminal_output"; agentName: string; paneIndex: number; content: string }
   | { type: "panes_discovered"; panes: { agentName: string | null; paneIndex: number }[] }
-  | { type: "webhook_status"; status: SprintState["webhookStatus"] };
+  | { type: "webhook_status"; status: SprintState["webhookStatus"] }
+  | { type: "token_budget_approaching"; usage: SprintState["tokenUsage"] }
+  | { type: "token_budget_exceeded"; usage: SprintState["tokenUsage"] }
+  | { type: "replay_complete" }
+  | { type: "replay_start"; totalEvents: number };
 
-export type AppPhase = "setup" | "planning" | "sprint";
+export type AppPhase = "setup" | "planning" | "sprint" | "replay";

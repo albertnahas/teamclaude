@@ -65,6 +65,8 @@ export interface SprintState {
   pendingCheckpoint: { taskId: string; taskSubject: string } | null;
   tmuxAvailable: boolean;
   tmuxSessionName: string | null;
+  tokenBudgetApproaching?: boolean;
+  tokenBudgetExceeded?: boolean;
   webhookStatus?: {
     lastEvent?: string;
     lastStatus?: "success" | "error";
@@ -94,7 +96,11 @@ export type WsEvent =
   | { type: "process_exited"; code: number | null }
   | { type: "terminal_output"; agentName: string; paneIndex: number; content: string }
   | { type: "panes_discovered"; panes: { agentName: string | null; paneIndex: number }[] }
-  | { type: "webhook_status"; status: SprintState["webhookStatus"] };
+  | { type: "webhook_status"; status: SprintState["webhookStatus"] }
+  | { type: "token_budget_approaching"; usage: SprintState["tokenUsage"] }
+  | { type: "token_budget_exceeded"; usage: SprintState["tokenUsage"] }
+  | { type: "replay_complete" }
+  | { type: "replay_start"; totalEvents: number };
 
 // --- State ---
 
@@ -131,6 +137,14 @@ export function setTeamInitMessageSent(value: boolean) {
   teamInitMessageSent = value;
 }
 
+// --- Recording hook ---
+
+let recordHook: ((event: WsEvent) => void) | null = null;
+
+export function setRecordHook(fn: ((event: WsEvent) => void) | null) {
+  recordHook = fn;
+}
+
 // --- Helpers ---
 
 export function safeReadJSON(path: string): unknown | null {
@@ -150,6 +164,7 @@ export function broadcast(event: WsEvent) {
   // Persist on every state mutation (debounced)
   if (event.type !== "terminal_output" && event.type !== "panes_discovered") {
     scheduleSave(state);
+    recordHook?.(event);
   }
 }
 
@@ -201,6 +216,8 @@ export function resetState() {
   state.checkpoints = [];
   state.pendingCheckpoint = null;
   state.tmuxSessionName = null;
+  state.tokenBudgetApproaching = false;
+  state.tokenBudgetExceeded = false;
   state.webhookStatus = { deliveryCount: 0 };
   setTeamInitMessageSent(false);
   taskProtocolOverrides.clear();

@@ -1,5 +1,9 @@
 # TeamClaude
 
+[![npm version](https://img.shields.io/npm/v/teamclaude)](https://www.npmjs.com/package/teamclaude)
+[![CI](https://github.com/albertonahas/teamclaude/actions/workflows/ci.yml/badge.svg)](https://github.com/albertonahas/teamclaude/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Autonomous sprint plugin for Claude Code. Orchestrates manager + engineer agent teams with a real-time visualization dashboard.
 
 ## Install
@@ -89,9 +93,12 @@ If tmux is not installed, the dashboard works exactly as before — agents run a
 ## CLI Commands
 
 ```bash
-npx teamclaude start [--port N]     # Start visualization server (default: 3456)
-npx teamclaude init [--global] [--force]  # Scaffold into .claude/
-npx teamclaude --version            # Print version
+npx teamclaude start [--port N]                    # Start visualization server (default: 3456)
+npx teamclaude init [--global] [--force]           # Scaffold agents/commands/skills into .claude/
+npx teamclaude init --template <name>              # Init .sprint.yml from a pre-built template
+npx teamclaude init --template list                # List available templates
+npx teamclaude replay <file.json> [--speed N]      # Replay a recorded sprint in the dashboard
+npx teamclaude --version                           # Print version
 ```
 
 ### `init` options
@@ -100,6 +107,8 @@ npx teamclaude --version            # Print version
 |------|--------|
 | `--global` | Install to `~/.claude/` instead of `./.claude/` |
 | `--force` | Overwrite existing files |
+| `--template <name>` | Copy a pre-built template to `.sprint.yml` |
+| `--template list` | List all available templates |
 
 ## Project Detection
 
@@ -162,6 +171,19 @@ The server watches Claude Code's native Agent Teams file system and streams delt
 | **sprint-pm** | Analyzes codebase, creates roadmaps, validates results. Never writes code. (Autonomous mode only) |
 | **sprint-manager** | Delegates tasks, reviews code, drives sprint to completion. Never writes code. |
 | **sprint-engineer** | Implements features, fixes bugs, writes tests. Submits work for review. |
+| **sprint-qa** | Validates acceptance criteria, runs tests, reports defects. Never writes code. |
+| **sprint-tech-writer** | Updates docs, changelogs, inline comments. Never writes code. |
+
+Custom roles can be added by dropping an `agents/<role>.md` definition file and referencing it in `.sprint.yml`:
+
+```yaml
+agents:
+  roles:
+    - engineer
+    - engineer
+    - qa
+    - tech-writer
+```
 
 ### Message Protocol
 
@@ -189,15 +211,32 @@ The server exposes a REST API alongside the WebSocket stream:
 | `/api/launch` | POST | Launch a sprint (`{ roadmap, engineers, includePM, cycles }`) |
 | `/api/stop` | POST | Stop sprint, record analytics, generate retro + PR summary |
 | `/api/pause` | POST | Toggle pause/resume |
+| `/api/resume` | POST | Resume persisted sprint after server restart |
 | `/api/process-status` | GET | Running process info (PID, startedAt) |
-| `/api/analytics` | GET | Sprint history (`?cycle=N&limit=N` filters) |
-| `/api/retro` | GET | Last generated retrospective (markdown) |
+| `/api/analytics` | GET | Sprint history (`?cycle=N&limit=N&format=csv` filters) |
+| `/api/retro` | GET | Last generated retrospective (`?format=json` for structured) |
+| `/api/retro/gist` | POST | Publish retro to GitHub Gist, returns `{ url }` |
+| `/api/retro/diff` | GET | Diff two sprints (`?a=<sprintId>&b=<sprintId>`) |
+| `/api/history` | GET | List all sprint history entries |
+| `/api/history/:id/retro` | GET | Retro for a specific past sprint |
+| `/api/velocity.svg` | GET | Velocity chart SVG (`?w=N&h=N`) |
+| `/api/plan` | GET | Task dependency analysis + model routing plan |
+| `/api/plan/approve` | POST | Approve the pre-sprint plan |
+| `/api/task-models` | GET | Model routing decision per task |
 | `/api/git-status` | GET | Current branch + sprint branch status |
 | `/api/checkpoint` | POST | Set a human checkpoint on a task (`{ taskId }`) |
 | `/api/checkpoint/release` | POST | Release a pending checkpoint |
 | `/api/dismiss-escalation` | POST | Dismiss an escalation alert |
+| `/api/dismiss-merge-conflict` | POST | Dismiss a merge conflict alert |
+| `/api/learnings` | GET | Process learnings from past sprints |
+| `/api/process-learnings` | GET | Process learnings (alias) |
+| `/api/process-learnings/:id` | DELETE | Remove a specific learning |
+| `/api/memories` | GET | List persistent agent memories (`?role=X&q=query`) |
+| `/api/memories` | POST | Save a memory (`{ role, key, value }`) |
+| `/api/memories/:id` | DELETE | Delete a memory by ID |
+| `/api/templates` | GET | List available sprint templates |
 
-WebSocket events: `init`, `task_updated`, `message_sent`, `agent_status`, `token_usage`, `checkpoint`, `cycle_info`, `paused`, `escalation`, `process_started`, `process_exited`, `terminal_output`, `panes_discovered`.
+WebSocket events: `init`, `task_updated`, `message_sent`, `agent_status`, `token_usage`, `checkpoint`, `cycle_info`, `paused`, `escalation`, `process_started`, `process_exited`, `terminal_output`, `panes_discovered`, `merge_conflict`, `budget_warning`.
 
 ## Architecture
 
@@ -209,23 +248,97 @@ teamclaude/
 ├── agents/
 │   ├── sprint-manager.md       # Manager agent definition
 │   ├── sprint-engineer.md      # Engineer agent definition
-│   └── sprint-pm.md            # PM agent definition
+│   ├── sprint-pm.md            # PM agent definition
+│   ├── qa.md                   # QA agent definition
+│   └── tech-writer.md          # Tech Writer agent definition
 ├── commands/sprint.md          # /sprint slash command
 ├── skills/sprint.md            # Skill trigger
+├── templates/                  # Pre-built sprint templates (bug-bash, feature, refactor, security-audit)
 ├── server/
-│   ├── index.ts                # HTTP + WebSocket server + API endpoints
-│   ├── watcher.ts              # File system watcher (chokidar) + protocol inference
-│   ├── state.ts                # Types + state management + project detection
-│   ├── analytics.ts            # Sprint history recording + loading
+│   ├── index.ts                # HTTP + WebSocket server entry
+│   ├── http-handlers.ts        # All HTTP route handlers
+│   ├── sprint-lifecycle.ts     # Process/tmux launch and pane polling
+│   ├── watcher.ts              # Chokidar file watcher + protocol message handling
+│   ├── state.ts                # SprintState singleton + WsEvent types + broadcast()
+│   ├── protocol.ts             # Message protocol tag detection
+│   ├── prompt.ts               # Sprint prompt compilation for all agent roles
+│   ├── analytics.ts            # Sprint history recording and loading
+│   ├── persistence.ts          # Debounced state save/load to .teamclaude/state.json
+│   ├── storage.ts              # Storage path helpers
 │   ├── git.ts                  # Sprint branch creation + PR summary generation
 │   ├── retro.ts                # Auto-generated sprint retrospectives
+│   ├── retro-diff.ts           # Side-by-side sprint comparison
 │   ├── tmux.ts                 # Tmux session lifecycle + pane I/O
-│   ├── protocol.ts             # Message protocol detection
-│   ├── prompt.ts               # Sprint prompt compilation
-│   └── ui.html                 # Dashboard UI (xterm.js for terminal view)
+│   ├── model-router.ts         # Task complexity → model selection (haiku/sonnet/opus)
+│   ├── planner.ts              # Task dependency inference + execution ordering
+│   ├── learnings.ts            # Cross-sprint process learning extraction
+│   ├── memory.ts               # Persistent key-value memory store
+│   ├── plugin-loader.ts        # Plugin auto-discovery from .teamclaude/plugins/
+│   ├── github.ts               # GitHub REST API (issues, PR comments)
+│   ├── notifications.ts        # Outbound webhook dispatching
+│   ├── budget.ts               # Token budget limits with auto-pause
+│   ├── velocity.ts             # Velocity chart SVG generation
+│   ├── gist.ts                 # GitHub Gist export
+│   ├── verification.ts         # Post-task verification gate
+│   ├── templates.ts            # Sprint template loading
+│   ├── replay.ts               # Sprint replay event stream
+│   ├── replay-server.ts        # HTTP server for sprint replay
+│   └── ui.html                 # Dashboard bundle (generated — edit dashboard/src/)
+├── dashboard/src/              # React + TypeScript dashboard (Vite)
 ├── bin/teamclaude.js           # CLI entry point
 └── .sprint.example.yml         # Example project config
 ```
+
+## Plugin API
+
+Drop a `.js` file into `.teamclaude/plugins/` to hook into sprint lifecycle events:
+
+```javascript
+// .teamclaude/plugins/notify.js
+export default {
+  name: "notify",
+  hooks: {
+    onSprintStart(state) { console.log(`Sprint started: ${state.teamName}`); },
+    onTaskComplete(task) { console.log(`Task done: ${task.subject}`); },
+    onSprintStop(state) { console.log(`Sprint stopped`); },
+  },
+};
+```
+
+Available hooks: `onSprintStart`, `onTaskComplete`, `onEscalation`, `onSprintStop`. Errors in plugins are caught and logged — they never crash the server.
+
+## Sprint Replay
+
+Record a sprint by capturing the events from `/api/state`, then replay it in the dashboard:
+
+```bash
+npx teamclaude replay examples/bug-fix.json
+npx teamclaude replay examples/bug-fix.json --speed 5   # 5× faster
+```
+
+## GitHub Integration
+
+Opt in via `.sprint.yml` to auto-create GitHub issues from tasks and post retros as PR comments:
+
+```yaml
+github:
+  repo: "your-org/your-repo"         # required
+  pr_number: 42                       # optional — post retro to this PR
+```
+
+Set `GITHUB_TOKEN` in your environment. The token needs `issues:write` and `pull_requests:write` scopes.
+
+## Token Budget
+
+Prevent runaway token spend by setting a budget limit in `.sprint.yml`:
+
+```yaml
+budget:
+  max_tokens: 100000      # auto-pause when total tokens exceed this
+  warn_at: 80000          # show dashboard warning at this threshold
+```
+
+When the budget is hit, the sprint pauses and a warning appears in the dashboard. Resume with the Pause/Resume button after adjusting the budget or stopping the sprint.
 
 ## License
 

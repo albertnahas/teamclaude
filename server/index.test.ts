@@ -109,12 +109,14 @@ vi.mock("./watcher.js", () => ({
 
 vi.mock("./prompt.js", () => ({
   compileSprintPrompt: vi.fn(() => "compiled-prompt"),
+  loadCustomRoles: vi.fn(() => null),
 }));
 
 vi.mock("./storage.js", () => ({
   setProjectRoot: vi.fn(),
   generateSprintId: vi.fn(() => "sprint-20260220T120000"),
   historyDir: vi.fn(() => "/tmp/tc-test-history"),
+  sprintHistoryDir: vi.fn((id: string) => `/tmp/tc-test-history/${id}`),
 }));
 
 vi.mock("./analytics.js", () => ({
@@ -138,9 +140,6 @@ vi.mock("./analytics.js", () => ({
 }));
 
 vi.mock("./learnings.js", () => ({
-  loadLearnings: vi.fn(() => ""),
-  getRecentLearnings: vi.fn(() => ""),
-  appendLearnings: vi.fn(),
   getRoleLearnings: vi.fn(() => ({ orchestrator: "", pm: "", manager: "", engineer: "" })),
   extractProcessLearnings: vi.fn(() => ({ version: 1, learnings: [] })),
   loadProcessLearnings: vi.fn(() => ({ version: 1, learnings: [] })),
@@ -260,7 +259,6 @@ import { recordSprintCompletion, loadSprintHistory, saveSprintSnapshot, saveRetr
 import { generateRetro, parseRetro } from "./retro.js";
 import { createGist } from "./gist.js";
 import { generatePRSummary, getCurrentBranch } from "./git.js";
-import { appendLearnings } from "./learnings.js";
 
 function resetStateFields() {
   (state as any).teamName = null;
@@ -395,6 +393,44 @@ describe("GET /api/analytics", () => {
     // last 2 entries
     expect(r.json[0].cycle).toBe(2);
     expect(r.json[1].cycle).toBe(3);
+  });
+
+  it("returns CSV with correct headers when format=csv", async () => {
+    vi.mocked(loadSprintHistory).mockReturnValueOnce([
+      {
+        sprintId: "sprint-abc",
+        startedAt: "2026-02-21T14:00:00.000Z",
+        completedAt: "2026-02-21T14:06:00.000Z",
+        cycle: 1,
+        completedTasks: 4,
+        totalTasks: 5,
+        blockedTasks: 0,
+        avgReviewRoundsPerTask: 1.2,
+        totalMessages: 48,
+        agents: ["sprint-manager", "sprint-engineer"],
+      },
+    ]);
+    const r = await request("GET", "/api/analytics?format=csv");
+    expect(r.status).toBe(200);
+    expect(r.headers["content-type"]).toMatch(/text\/csv/);
+    expect(r.headers["content-disposition"]).toMatch(/teamclaude-history\.csv/);
+    const lines = r.body.trim().split("\n");
+    expect(lines[0]).toBe("sprintId,completedAt,cycle,completedTasks,totalTasks,completionRate,avgReviewRoundsPerTask,totalMessages,durationSeconds");
+    expect(lines[1]).toContain("sprint-abc");
+    expect(lines[1]).toContain(",1,");   // cycle
+    expect(lines[1]).toContain(",4,");   // completedTasks
+    expect(lines[1]).toContain(",80,");  // completionRate (4/5 = 80%)
+    expect(lines[1]).toContain(",360");  // durationSeconds (6 min)
+  });
+
+  it("returns empty CSV (header only) when no history", async () => {
+    vi.mocked(loadSprintHistory).mockReturnValueOnce([]);
+    const r = await request("GET", "/api/analytics?format=csv");
+    expect(r.status).toBe(200);
+    expect(r.headers["content-type"]).toMatch(/text\/csv/);
+    const lines = r.body.trim().split("\n");
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("sprintId");
   });
 });
 

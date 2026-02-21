@@ -1,5 +1,8 @@
-import { describe, it, expect } from "vitest";
-import { compileSprintPrompt } from "./prompt";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { join } from "node:path";
+import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { compileSprintPrompt, loadCustomRoles, loadAgentDefinition } from "./prompt";
 import type { RoleLearnings } from "./learnings";
 
 describe("compileSprintPrompt", () => {
@@ -35,11 +38,40 @@ describe("compileSprintPrompt", () => {
       expect(prompt).toContain("Distribute tasks evenly");
     });
 
-    it("includes quality review instructions for manager", () => {
+    it("includes quality review checklist for manager", () => {
       const prompt = compileSprintPrompt("Build features", 2, true, 1);
-      expect(prompt).toContain("dead code");
-      expect(prompt).toContain("duplicate");
+      expect(prompt).toContain("Review checklist");
       expect(prompt).toContain("REQUEST_CHANGES");
+    });
+
+    it("manager checklist includes CSS verification", () => {
+      const prompt = compileSprintPrompt("Build features", 2, true, 1);
+      expect(prompt).toContain("CSS exists for every new className");
+      expect(prompt).toContain("Grep the stylesheet");
+    });
+
+    it("manager checklist includes duplicate data detection", () => {
+      const prompt = compileSprintPrompt("Build features", 2, true, 1);
+      expect(prompt).toContain("Single source of truth");
+      expect(prompt).toContain("no duplicate pricing tables");
+    });
+
+    it("manager checklist includes test isolation verification", () => {
+      const prompt = compileSprintPrompt("Build features", 2, true, 1);
+      expect(prompt).toContain("mocks cover all imported modules");
+      expect(prompt).toContain("afterEach cleanup");
+    });
+
+    it("manager checklist requires reading actual files", () => {
+      const prompt = compileSprintPrompt("Build features", 2, true, 1);
+      expect(prompt).toContain("Read the actual files changed");
+      expect(prompt).toContain("do not approve based solely on test pass/fail");
+    });
+
+    it("manager checklist includes data correctness verification", () => {
+      const prompt = compileSprintPrompt("Build features", 2, true, 1);
+      expect(prompt).toContain("verify they are factually correct");
+      expect(prompt).toContain("Do not trust AI-generated numbers");
     });
   });
 
@@ -69,12 +101,6 @@ describe("compileSprintPrompt", () => {
   });
 
   describe("engineer quality instructions", () => {
-    it("tells engineers to run tests before submitting", () => {
-      const prompt = compileSprintPrompt("Build it", 1, false, 1);
-      expect(prompt).toContain("Run the project");
-      expect(prompt).toContain("test");
-    });
-
     it("tells engineers NOT to mark tasks as completed", () => {
       const prompt = compileSprintPrompt("Build it", 1, false, 1);
       expect(prompt).toContain("Do NOT call TaskUpdate to set status");
@@ -89,6 +115,34 @@ describe("compileSprintPrompt", () => {
     it("tells engineers to clean up dead code", () => {
       const prompt = compileSprintPrompt("Build it", 1, false, 1);
       expect(prompt).toContain("dead code");
+    });
+
+    it("includes pre-submit checklist with CSS verification", () => {
+      const prompt = compileSprintPrompt("Build it", 1, false, 1);
+      expect(prompt).toContain("Pre-submit checklist");
+      expect(prompt).toContain("CSS exists for every className");
+    });
+
+    it("includes pre-submit checklist with mock isolation requirement", () => {
+      const prompt = compileSprintPrompt("Build it", 1, false, 1);
+      expect(prompt).toContain("every external dependency is mocked");
+      expect(prompt).toContain("afterEach cleanup");
+    });
+
+    it("includes pre-submit checklist with React hook guidance", () => {
+      const prompt = compileSprintPrompt("Build it", 1, false, 1);
+      expect(prompt).toContain("useRef or useMemo");
+      expect(prompt).toContain("Never pass inline object literals as useEffect dependencies");
+    });
+
+    it("includes pre-submit checklist with race condition guidance", () => {
+      const prompt = compileSprintPrompt("Build it", 1, false, 1);
+      expect(prompt).toContain("capture values in local variables");
+    });
+
+    it("includes pre-submit checklist requiring duplicate search for constants", () => {
+      const prompt = compileSprintPrompt("Build it", 1, false, 1);
+      expect(prompt).toContain("Never duplicate data that exists elsewhere");
     });
   });
 
@@ -185,5 +239,171 @@ describe("compileSprintPrompt", () => {
       expect(prompt).not.toContain("apply these improvements to review");
       expect(prompt).not.toContain("apply these improvements to implementation");
     });
+  });
+});
+
+// ─── loadCustomRoles ──────────────────────────────────────────────────────────
+
+describe("loadCustomRoles", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = join(tmpdir(), `tc-roles-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    mkdirSync(dir, { recursive: true });
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("returns null when no .sprint.yml", () => {
+    expect(loadCustomRoles(dir)).toBeNull();
+  });
+
+  it("returns null when no agents section", () => {
+    writeFileSync(join(dir, ".sprint.yml"), "server:\n  port: 3456\n");
+    expect(loadCustomRoles(dir)).toBeNull();
+  });
+
+  it("returns null when agents section has no roles", () => {
+    writeFileSync(join(dir, ".sprint.yml"), "agents:\n  model: sonnet\n");
+    expect(loadCustomRoles(dir)).toBeNull();
+  });
+
+  it("parses a roles list", () => {
+    writeFileSync(join(dir, ".sprint.yml"), [
+      "agents:",
+      "  model: sonnet",
+      "  roles:",
+      "    - engineer",
+      "    - engineer",
+      "    - qa",
+    ].join("\n") + "\n");
+    expect(loadCustomRoles(dir)).toEqual(["engineer", "engineer", "qa"]);
+  });
+
+  it("strips quotes from role names", () => {
+    writeFileSync(join(dir, ".sprint.yml"), [
+      "agents:",
+      "  roles:",
+      '    - "engineer"',
+      "    - 'qa'",
+    ].join("\n") + "\n");
+    expect(loadCustomRoles(dir)).toEqual(["engineer", "qa"]);
+  });
+
+  it("returns null for empty roles list", () => {
+    writeFileSync(join(dir, ".sprint.yml"), "agents:\n  roles:\n");
+    expect(loadCustomRoles(dir)).toBeNull();
+  });
+});
+
+// ─── loadAgentDefinition ──────────────────────────────────────────────────────
+
+describe("loadAgentDefinition", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = join(tmpdir(), `tc-agentdef-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    mkdirSync(join(dir, "agents"), { recursive: true });
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("returns null when agent file does not exist", () => {
+    expect(loadAgentDefinition("nonexistent", dir)).toBeNull();
+  });
+
+  it("loads agent definition and strips YAML frontmatter", () => {
+    writeFileSync(join(dir, "agents", "qa.md"), [
+      "---",
+      "name: sprint-qa",
+      "model: sonnet",
+      "---",
+      "",
+      "# QA Engineer",
+      "",
+      "You are a QA agent.",
+    ].join("\n"));
+    const def = loadAgentDefinition("qa", dir);
+    expect(def).not.toBeNull();
+    expect(def).toContain("QA Engineer");
+    expect(def).not.toContain("---");
+    expect(def).not.toContain("name: sprint-qa");
+  });
+
+  it("normalizes sprint- prefix (qa and sprint-qa both load qa.md)", () => {
+    writeFileSync(join(dir, "agents", "qa.md"), "---\nname: qa\n---\n# QA");
+    expect(loadAgentDefinition("qa", dir)).toContain("QA");
+    expect(loadAgentDefinition("sprint-qa", dir)).toContain("QA");
+  });
+
+  it("returns content for tech-writer role", () => {
+    writeFileSync(join(dir, "agents", "tech-writer.md"), "---\nname: tech-writer\n---\n# Tech Writer");
+    expect(loadAgentDefinition("tech-writer", dir)).toContain("Tech Writer");
+  });
+});
+
+// ─── compileSprintPrompt with custom roles ────────────────────────────────────
+
+describe("compileSprintPrompt — custom roles", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = join(tmpdir(), `tc-prompt-roles-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    mkdirSync(join(dir, "agents"), { recursive: true });
+    // Write a minimal QA agent definition
+    writeFileSync(join(dir, "agents", "qa.md"), [
+      "---",
+      "name: sprint-qa",
+      "---",
+      "# QA",
+      "You are a QA agent for team.",
+    ].join("\n"));
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("includes custom role agent in manual mode prompt", () => {
+    const prompt = compileSprintPrompt("Build it", 1, false, 1, undefined, ["engineer", "qa"], dir);
+    expect(prompt).toContain("sprint-engineer");
+    expect(prompt).toContain("sprint-qa");
+  });
+
+  it("uses agent definition file content for known custom roles", () => {
+    const prompt = compileSprintPrompt("Build it", 1, false, 1, undefined, ["qa"], dir);
+    expect(prompt).toContain("QA");
+    expect(prompt).toContain("QA agent for team");
+  });
+
+  it("numbers multiple instances of the same role", () => {
+    const prompt = compileSprintPrompt("Build it", 2, false, 1, undefined, ["engineer", "engineer"], dir);
+    expect(prompt).toContain("sprint-engineer-1");
+    expect(prompt).toContain("sprint-engineer-2");
+  });
+
+  it("uses plain name when only one instance of a role", () => {
+    const prompt = compileSprintPrompt("Build it", 1, false, 1, undefined, ["qa"], dir);
+    expect(prompt).toContain("sprint-qa");
+    expect(prompt).not.toContain("sprint-qa-1");
+  });
+
+  it("includes distribution rule for multiple custom agents", () => {
+    const prompt = compileSprintPrompt("Build it", 2, false, 1, undefined, ["engineer", "qa"], dir);
+    expect(prompt).toContain("round-robin");
+  });
+
+  it("falls back to generic prompt for unknown roles", () => {
+    // No agents/designer.md exists in tmp dir
+    const prompt = compileSprintPrompt("Build it", 1, false, 1, undefined, ["designer"], dir);
+    expect(prompt).toContain("sprint-designer");
+    expect(prompt).toContain("specialized skills");
+  });
+
+  it("works in autonomous mode with custom roles", () => {
+    const prompt = compileSprintPrompt("Build it", 1, true, 1, undefined, ["engineer", "qa"], dir);
+    expect(prompt).toContain("AUTONOMOUS mode");
+    expect(prompt).toContain("sprint-qa");
   });
 });

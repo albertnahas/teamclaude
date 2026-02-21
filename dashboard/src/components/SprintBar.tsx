@@ -7,9 +7,10 @@ interface SprintBarProps {
   onPause: () => void;
   onStop: () => void;
   onToggleTheme: () => void;
+  onShowShortcuts?: () => void;
 }
 
-export function SprintBar({ state, theme, onPause, onStop, onToggleTheme }: SprintBarProps) {
+export function SprintBar({ state, theme, onPause, onStop, onToggleTheme, onShowShortcuts }: SprintBarProps) {
   const cycleLabel =
     state.cycle > 0
       ? `Cycle ${state.cycle} · ${state.phase}`
@@ -30,6 +31,16 @@ export function SprintBar({ state, theme, onPause, onStop, onToggleTheme }: Spri
       <span className="sprint-bar-sep" />
       {cycleLabel && <span className="sprint-bar-cycle">{cycleLabel}</span>}
       <span className="sprint-bar-spacer" />
+      {onShowShortcuts && (
+        <button
+          className="theme-toggle"
+          onClick={onShowShortcuts}
+          title="Keyboard shortcuts (?)"
+          style={{ fontFamily: "var(--font-mono)", fontSize: 13 }}
+        >
+          ?
+        </button>
+      )}
       <button
         className="theme-toggle"
         onClick={onToggleTheme}

@@ -10,11 +10,8 @@ const tmpProjectRoot = mkdtempSync(join(tmpdir(), "tc-learnings-test-"));
 vi.mock("./storage.js", () => {
   const _join = require("node:path").join;
   const _mkdirSync = require("node:fs").mkdirSync;
-  const _writeFileSync = require("node:fs").writeFileSync;
-  const _existsSync = require("node:fs").existsSync;
   const tcDir = () => _join(tmpProjectRoot, ".teamclaude");
   return {
-    learningsPath: () => _join(tcDir(), "learnings.md"),
     processLearningsPath: () => _join(tcDir(), "learnings.json"),
     ensureStorageDir: () => {
       _mkdirSync(tcDir(), { recursive: true });
@@ -23,9 +20,6 @@ vi.mock("./storage.js", () => {
 });
 
 const {
-  loadLearnings,
-  appendLearnings,
-  getRecentLearnings,
   SIGNALS,
   loadProcessLearnings,
   extractProcessLearnings,
@@ -35,7 +29,6 @@ const {
   saveAndRemoveLearning,
 } = await import("./learnings.js");
 
-const learningsFile = join(tmpProjectRoot, ".teamclaude", "learnings.md");
 const processLearningsFile = join(tmpProjectRoot, ".teamclaude", "learnings.json");
 
 function makeState(overrides: Partial<SprintState> = {}): SprintState {
@@ -81,94 +74,7 @@ function makeRecord(overrides: Partial<SprintRecord> = {}): SprintRecord {
 }
 
 beforeEach(() => {
-  if (existsSync(learningsFile)) rmSync(learningsFile);
   if (existsSync(processLearningsFile)) rmSync(processLearningsFile);
-});
-
-// --- Legacy function tests ---
-
-describe("loadLearnings", () => {
-  it("returns empty string when file does not exist", () => {
-    expect(loadLearnings()).toBe("");
-  });
-
-  it("returns file content when it exists", () => {
-    mkdirSync(join(tmpProjectRoot, ".teamclaude"), { recursive: true });
-    writeFileSync(learningsFile, "# Sprint Learnings\n\nSome content", "utf-8");
-    expect(loadLearnings()).toBe("# Sprint Learnings\n\nSome content");
-  });
-});
-
-describe("appendLearnings", () => {
-  it("creates the file with header on first call", () => {
-    const state = makeState();
-    const record = makeRecord();
-    appendLearnings(state, record, "retro text");
-
-    expect(existsSync(learningsFile)).toBe(true);
-    const content = readFileSync(learningsFile, "utf-8");
-    expect(content).toContain("# Sprint Learnings");
-    expect(content).toContain("## Sprint test-team-123");
-    expect(content).toContain("Task 1");
-  });
-
-  it("includes completed and incomplete task sections", () => {
-    appendLearnings(makeState(), makeRecord(), "retro");
-
-    const content = readFileSync(learningsFile, "utf-8");
-    expect(content).toContain("### Completed");
-    expect(content).toContain("- Task 1");
-    expect(content).toContain("### Incomplete");
-    expect(content).toContain("- Task 2 (in_progress)");
-  });
-
-  it("appends to existing file on subsequent calls", () => {
-    appendLearnings(makeState(), makeRecord({ sprintId: "first" }), "retro");
-    appendLearnings(makeState(), makeRecord({ sprintId: "second" }), "retro");
-
-    const content = readFileSync(learningsFile, "utf-8");
-    expect(content).toContain("## Sprint first");
-    expect(content).toContain("## Sprint second");
-  });
-
-  it("includes escalations when present", () => {
-    const state = makeState({
-      messages: [
-        { id: "e1", timestamp: 1000, from: "eng", to: "mgr", content: "Stuck on auth", protocol: "ESCALATION" },
-      ],
-    });
-    appendLearnings(state, makeRecord(), "retro");
-
-    const content = readFileSync(learningsFile, "utf-8");
-    expect(content).toContain("### Escalations");
-    expect(content).toContain("eng: Stuck on auth");
-  });
-});
-
-describe("getRecentLearnings", () => {
-  it("returns empty string when no file exists", () => {
-    expect(getRecentLearnings()).toBe("");
-  });
-
-  it("returns last N sprint sections", () => {
-    appendLearnings(makeState(), makeRecord({ sprintId: "s1" }), "retro");
-    appendLearnings(makeState(), makeRecord({ sprintId: "s2" }), "retro");
-    appendLearnings(makeState(), makeRecord({ sprintId: "s3" }), "retro");
-    appendLearnings(makeState(), makeRecord({ sprintId: "s4" }), "retro");
-
-    const recent = getRecentLearnings(2);
-    expect(recent).not.toContain("## Sprint s1");
-    expect(recent).not.toContain("## Sprint s2");
-    expect(recent).toContain("## Sprint s3");
-    expect(recent).toContain("## Sprint s4");
-  });
-
-  it("returns all sections when fewer than N exist", () => {
-    appendLearnings(makeState(), makeRecord({ sprintId: "only" }), "retro");
-
-    const recent = getRecentLearnings(3);
-    expect(recent).toContain("## Sprint only");
-  });
 });
 
 // --- Signal detection tests ---

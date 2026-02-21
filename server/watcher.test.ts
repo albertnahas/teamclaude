@@ -1,5 +1,22 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
+// Mock modules that watcher.ts imports — must be before importing watcher
+vi.mock("./notifications.js", () => ({ notifyWebhook: vi.fn(), initNotifications: vi.fn() }));
+vi.mock("./plugin-loader.js", () => ({
+  fireOnTaskComplete: vi.fn(),
+  fireOnEscalation: vi.fn(),
+  fireOnSprintStart: vi.fn(),
+  fireOnSprintStop: vi.fn(),
+  getPlugins: vi.fn(() => []),
+  loadPlugins: vi.fn(() => Promise.resolve()),
+}));
+vi.mock("./token-tracker.js", () => ({ accumulateTokenUsage: vi.fn() }));
+vi.mock("./memory.js", () => ({ saveMemory: vi.fn() }));
+vi.mock("./github.js", () => ({
+  loadGitHubConfig: vi.fn(() => null),
+  createIssuesForSprint: vi.fn(() => Promise.resolve()),
+}));
+
 // Mock state module — must be before importing watcher
 vi.mock("./state.js", () => {
   const state = {
@@ -51,6 +68,8 @@ import {
   handleTaskFile,
 } from "./watcher.js";
 import { state, inboxCursors, taskProtocolOverrides, broadcast, safeReadJSON, setTeamInitMessageSent } from "./state.js";
+import { saveMemory } from "./memory.js";
+import { accumulateTokenUsage } from "./token-tracker.js";
 
 function resetState() {
   state.teamName = null;
@@ -410,9 +429,7 @@ describe("handleInboxMessage", () => {
       { from: "sprint-manager", content: "hi", usage: { input_tokens: 100, output_tokens: 50 } },
     ]);
     handleInboxMessage(inboxPath);
-    expect(state.tokenUsage.total).toBe(150);
-    expect(state.tokenUsage.byAgent["sprint-engineer-1"]).toBe(150);
-    expect(state.tokenUsage.estimatedCostUsd).toBeGreaterThan(0);
+    expect(accumulateTokenUsage).toHaveBeenCalledWith("sprint-engineer-1", 100, 50);
   });
 
   it("TASK_ASSIGNED — sets task to in_progress and assigns owner", () => {
@@ -627,6 +644,56 @@ describe("handleInboxMessage", () => {
       ]);
       handleInboxMessage(inboxPath);
       expect(state.agents.some((a) => a.name === "system")).toBe(false);
+    });
+  });
+
+  describe("MEMORY protocol", () => {
+    beforeEach(() => {
+      vi.mocked(saveMemory).mockClear();
+    });
+
+    it("calls saveMemory with correct key and value on valid format", () => {
+      vi.mocked(safeReadJSON).mockReturnValue([
+        { from: "sprint-engineer-1", content: "MEMORY: auth-pattern — always use JWT for auth endpoints" },
+      ]);
+      handleInboxMessage(inboxPath);
+      expect(saveMemory).toHaveBeenCalledWith(
+        expect.any(String),
+        "engineer",
+        "auth-pattern",
+        "always use JWT for auth endpoints",
+        "sprint-abc"
+      );
+    });
+
+    it("infers role 'manager' from sprint-manager sender", () => {
+      vi.mocked(safeReadJSON).mockReturnValue([
+        { from: "sprint-manager", content: "MEMORY: code-style — prefer functional style" },
+      ]);
+      handleInboxMessage(inboxPath);
+      expect(saveMemory).toHaveBeenCalledWith(
+        expect.any(String),
+        "manager",
+        "code-style",
+        "prefer functional style",
+        "sprint-abc"
+      );
+    });
+
+    it("does not call saveMemory when separator is missing", () => {
+      vi.mocked(safeReadJSON).mockReturnValue([
+        { from: "sprint-engineer-1", content: "MEMORY: no separator here" },
+      ]);
+      handleInboxMessage(inboxPath);
+      expect(saveMemory).not.toHaveBeenCalled();
+    });
+
+    it("does not call saveMemory when key is empty", () => {
+      vi.mocked(safeReadJSON).mockReturnValue([
+        { from: "sprint-engineer-1", content: "MEMORY:  — value only" },
+      ]);
+      handleInboxMessage(inboxPath);
+      expect(saveMemory).not.toHaveBeenCalled();
     });
   });
 });
