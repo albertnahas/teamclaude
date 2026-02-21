@@ -11,8 +11,32 @@ import {
   broadcast,
 } from "./state.js";
 import { detectProtocol, extractContent } from "./protocol.js";
-import type { Message, TaskInfo } from "./state.js";
+import type { AgentInfo, Message, TaskInfo } from "./state.js";
 import { runVerification } from "./verification.js";
+import { notifyWebhook } from "./notifications.js";
+
+function inferAgentType(name: string): string {
+  if (name.includes("engineer")) return "sprint-engineer";
+  if (name.includes("manager")) return "sprint-manager";
+  if (name.includes("pm")) return "sprint-pm";
+  return "unknown";
+}
+
+/** Auto-discover an agent from inbox traffic if not already known. */
+function ensureAgent(name: string): AgentInfo | null {
+  if (!name || name === "unknown" || name === "system" || name === "all") return null;
+  const existing = state.agents.find((a) => a.name === name);
+  if (existing) return existing;
+  const agent: AgentInfo = {
+    name,
+    agentId: `${name}@${state.teamName ?? "unknown"}`,
+    agentType: inferAgentType(name),
+    status: "active",
+  };
+  state.agents.push(agent);
+  broadcast({ type: "agent_status", agent });
+  return agent;
+}
 
 export function isSprintTeam(config: any): boolean {
   if (!config?.members) return false;
@@ -58,6 +82,12 @@ export function handleTeamConfig(filePath: string) {
     `[sprint] Tracking team: ${teamName} (${state.agents.length} agents, ${state.mode} mode)`
   );
   broadcast({ type: "init", state });
+
+  notifyWebhook("sprint_started", {
+    teamName,
+    mode: state.mode,
+    taskCount: state.tasks.length,
+  });
 
   onTeamDiscovered?.(state.agents.map((a) => a.name));
 
@@ -150,6 +180,10 @@ export function handleInboxMessage(filePath: string) {
       (msg?.text as string) || (msg?.content as string) || JSON.stringify(msg)
     );
 
+    // Auto-discover agents from inbox traffic
+    ensureAgent(to);
+    ensureAgent(from);
+
     if (content.startsWith("[idle:")) {
       const agent = state.agents.find((a) => a.name === recipientName);
       if (agent) {
@@ -202,14 +236,22 @@ export function handleInboxMessage(filePath: string) {
                 state.tasks.find((t) => t.id === tid)?.subject ?? `Task #${tid}`;
               state.pendingCheckpoint = { taskId: tid, taskSubject };
               broadcast({ type: "checkpoint", checkpoint: state.pendingCheckpoint });
+              notifyWebhook("checkpoint_hit", { taskId: tid, subject: taskSubject });
             }
             break;
-          case "APPROVED":
+          case "APPROVED": {
             inferredStatus = "completed";
             state.reviewTaskIds = state.reviewTaskIds.filter(
               (id) => id !== tid
             );
+            const completedTask = state.tasks.find((t) => t.id === tid);
+            notifyWebhook("task_completed", {
+              taskId: tid,
+              subject: completedTask?.subject ?? `Task #${tid}`,
+              owner: completedTask?.owner ?? "",
+            });
             break;
+          }
           case "REQUEST_CHANGES":
           case "RESUBMIT":
             inferredStatus = "in_progress";
@@ -239,13 +281,19 @@ export function handleInboxMessage(filePath: string) {
     if (message.protocol === "ESCALATE") {
       const reason = content.replace(/^ESCALATE:\s*/, "");
       const taskMatch = reason.match(/^(\d+)/);
+      const escalatedTaskId = taskMatch?.[1] || "?";
       state.escalation = {
-        taskId: taskMatch?.[1] || "?",
+        taskId: escalatedTaskId,
         reason,
         from: from,
         timestamp: ts,
       };
       broadcast({ type: "escalation", escalation: state.escalation });
+      notifyWebhook("task_escalated", {
+        taskId: escalatedTaskId,
+        reason,
+        from,
+      });
     }
 
     if (state.mode === "autonomous" && message.protocol) {
@@ -268,6 +316,11 @@ export function handleInboxMessage(filePath: string) {
         state.phase = "validating";
         phaseChanged = true;
         triggerValidation();
+        notifyWebhook("sprint_complete", {
+          teamName: state.teamName ?? "",
+          tasksCompleted: state.tasks.filter((t) => t.status === "completed").length,
+          totalTasks: state.tasks.length,
+        });
       } else if (message.protocol === "ACCEPTANCE") {
         state.phase = "analyzing";
         phaseChanged = true;

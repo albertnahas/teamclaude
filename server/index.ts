@@ -26,6 +26,7 @@ import { generateVelocitySvg } from "./velocity.js";
 import { createGist } from "./gist.js";
 import { loadTemplates } from "./templates.js";
 import * as tmux from "./tmux.js";
+import { initNotifications, notifyWebhook } from "./notifications.js";
 
 // --- CLI flags ---
 
@@ -342,7 +343,15 @@ function handleRequest(req: IncomingMessage, res: ServerResponse) {
       tmux.reset();
     }
     let record: ReturnType<typeof recordSprintCompletion> | null = null;
-    if (wasRunning) record = recordSprintCompletion(state, startedAt);
+    if (wasRunning) {
+      record = recordSprintCompletion(state, startedAt);
+      notifyWebhook("sprint_complete", {
+        teamName: state.teamName ?? "",
+        tasksCompleted: state.tasks.filter((t) => t.status === "completed").length,
+        totalTasks: state.tasks.length,
+        duration: Date.now() - startedAt,
+      });
+    }
     const stateCopy = { ...state, tasks: [...state.tasks], messages: [...state.messages], agents: [...state.agents] };
     const history = loadSprintHistory();
     lastRetro = generateRetro(stateCopy, history);
@@ -715,6 +724,7 @@ setProjectRoot(process.cwd());
 migrateGlobalAnalytics();
 
 state.projectName = detectProjectName();
+initNotifications(process.cwd(), state.projectName);
 
 // Resume interrupted sprint from persisted state
 const persisted = loadPersistedState();

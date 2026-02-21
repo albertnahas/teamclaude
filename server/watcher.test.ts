@@ -560,4 +560,73 @@ describe("handleInboxMessage", () => {
       expect(state.phase).toBe("idle");
     });
   });
+
+  describe("agent auto-discovery", () => {
+    it("auto-discovers sender agent not in state.agents", () => {
+      state.agents = []; // no agents known
+      vi.mocked(safeReadJSON).mockReturnValue([
+        { from: "sprint-engineer-2", content: "hello" },
+      ]);
+      handleInboxMessage(inboxPath);
+      // Both recipient (sprint-engineer-1) and sender (sprint-engineer-2) should be discovered
+      expect(state.agents.some((a) => a.name === "sprint-engineer-2")).toBe(true);
+      expect(state.agents.some((a) => a.name === "sprint-engineer-1")).toBe(true);
+    });
+
+    it("auto-discovers recipient agent from inbox file path", () => {
+      state.agents = [];
+      vi.mocked(safeReadJSON).mockReturnValue([
+        { from: "sprint-manager", content: "TASK_ASSIGNED: #1" },
+      ]);
+      handleInboxMessage(inboxPath);
+      expect(state.agents.some((a) => a.name === "sprint-engineer-1")).toBe(true);
+    });
+
+    it("infers agentType from name", () => {
+      state.agents = [];
+      vi.mocked(safeReadJSON).mockReturnValue([
+        { from: "sprint-manager", content: "hi" },
+      ]);
+      handleInboxMessage(inboxPath);
+      const mgr = state.agents.find((a) => a.name === "sprint-manager");
+      const eng = state.agents.find((a) => a.name === "sprint-engineer-1");
+      expect(mgr?.agentType).toBe("sprint-manager");
+      expect(eng?.agentType).toBe("sprint-engineer");
+    });
+
+    it("does not duplicate agents already in state", () => {
+      // sprint-manager is already known
+      state.agents = [
+        { name: "sprint-manager", agentId: "mgr-1", agentType: "manager", status: "active" },
+      ];
+      vi.mocked(safeReadJSON).mockReturnValue([
+        { from: "sprint-manager", content: "hi" },
+      ]);
+      handleInboxMessage(inboxPath);
+      const mgrs = state.agents.filter((a) => a.name === "sprint-manager");
+      expect(mgrs).toHaveLength(1);
+    });
+
+    it("broadcasts agent_status for newly discovered agents", () => {
+      state.agents = [];
+      vi.mocked(safeReadJSON).mockReturnValue([
+        { from: "sprint-engineer-2", content: "hello" },
+      ]);
+      handleInboxMessage(inboxPath);
+      const agentStatusEvents = vi.mocked(broadcast).mock.calls
+        .filter((c) => c[0].type === "agent_status")
+        .map((c) => (c[0] as any).agent.name);
+      expect(agentStatusEvents).toContain("sprint-engineer-1");
+      expect(agentStatusEvents).toContain("sprint-engineer-2");
+    });
+
+    it("skips auto-discovery for system and unknown senders", () => {
+      state.agents = [];
+      vi.mocked(safeReadJSON).mockReturnValue([
+        { from: "system", content: "init" },
+      ]);
+      handleInboxMessage(inboxPath);
+      expect(state.agents.some((a) => a.name === "system")).toBe(false);
+    });
+  });
 });

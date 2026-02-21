@@ -34,3 +34,15 @@ sprint:
 server:
   # Visualization server port
   port: 3456
+
+notifications:
+  # Webhook URL to POST events to (Slack, Discord, or any custom endpoint)
+  # webhook: https://hooks.slack.com/services/T00/B00/xxx
+  #
+  # Events to send (default: all). Options:
+  #   sprint_started, task_escalated, task_completed, sprint_complete, checkpoint_hit
+  # events: [task_escalated, sprint_complete]
+  #
+  # Optional custom headers
+  # headers:
+  #   Authorization: "Bearer your-token"

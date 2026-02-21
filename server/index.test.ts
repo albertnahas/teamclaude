@@ -197,6 +197,11 @@ vi.mock("./tmux.js", () => ({
   reset: vi.fn(),
 }));
 
+vi.mock("./notifications.js", () => ({
+  initNotifications: vi.fn(),
+  notifyWebhook: vi.fn(),
+}));
+
 vi.mock("ws", () => ({
   WebSocketServer: class {
     on() { return this; }
@@ -249,6 +254,7 @@ afterAll(() => {
 // ─── Imported mocks for state manipulation ────────────────────────────────────
 
 import { state, broadcast, resetState } from "./state.js";
+import { notifyWebhook } from "./notifications.js";
 import { loadPersistedState } from "./persistence.js";
 import { recordSprintCompletion, loadSprintHistory, saveSprintSnapshot, saveRetroToHistory, saveRecordToHistory } from "./analytics.js";
 import { generateRetro, parseRetro } from "./retro.js";
@@ -703,5 +709,31 @@ describe("404 fallback", () => {
   it("returns 404 for unknown routes", async () => {
     const r = await request("GET", "/api/nonexistent");
     expect(r.status).toBe(404);
+  });
+});
+
+describe("notifyWebhook integration", () => {
+  beforeEach(() => {
+    vi.mocked(notifyWebhook).mockClear();
+  });
+
+  it("calls notifyWebhook with sprint_complete on POST /api/stop when sprint was running", async () => {
+    (state as any).teamName = "sprint-alpha";
+    vi.mocked(generatePRSummary).mockResolvedValueOnce("");
+    vi.mocked(generateRetro).mockReturnValueOnce("retro");
+    await json("POST", "/api/stop");
+    expect(notifyWebhook).toHaveBeenCalledWith(
+      "sprint_complete",
+      expect.objectContaining({ teamName: "sprint-alpha" })
+    );
+  });
+
+  it("skips notifyWebhook on POST /api/stop when no sprint was running", async () => {
+    // No teamName, no process — wasRunning is false
+    (state as any).teamName = null;
+    vi.mocked(generatePRSummary).mockResolvedValueOnce("");
+    vi.mocked(generateRetro).mockReturnValueOnce("retro");
+    await json("POST", "/api/stop");
+    expect(notifyWebhook).not.toHaveBeenCalled();
   });
 });

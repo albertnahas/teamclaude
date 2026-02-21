@@ -65,6 +65,12 @@ export interface SprintState {
   pendingCheckpoint: { taskId: string; taskSubject: string } | null;
   tmuxAvailable: boolean;
   tmuxSessionName: string | null;
+  webhookStatus?: {
+    lastEvent?: string;
+    lastStatus?: "success" | "error";
+    lastError?: string;
+    deliveryCount: number;
+  };
 }
 
 export type WsEvent =
@@ -87,7 +93,8 @@ export type WsEvent =
   | { type: "process_started"; pid: number }
   | { type: "process_exited"; code: number | null }
   | { type: "terminal_output"; agentName: string; paneIndex: number; content: string }
-  | { type: "panes_discovered"; panes: { agentName: string | null; paneIndex: number }[] };
+  | { type: "panes_discovered"; panes: { agentName: string | null; paneIndex: number }[] }
+  | { type: "webhook_status"; status: SprintState["webhookStatus"] };
 
 // --- State ---
 
@@ -109,6 +116,7 @@ export const state: SprintState = {
   pendingCheckpoint: null,
   tmuxAvailable: false,
   tmuxSessionName: null,
+  webhookStatus: { deliveryCount: 0 },
 };
 
 export const inboxCursors = new Map<string, number>();
@@ -193,6 +201,7 @@ export function resetState() {
   state.checkpoints = [];
   state.pendingCheckpoint = null;
   state.tmuxSessionName = null;
+  state.webhookStatus = { deliveryCount: 0 };
   setTeamInitMessageSent(false);
   taskProtocolOverrides.clear();
   inboxCursors.clear();
