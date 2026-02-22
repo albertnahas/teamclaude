@@ -11,9 +11,7 @@
 Autonomous sprint plugin for Claude Code. Orchestrates manager + engineer agent teams with a real-time visualization dashboard.
 
 <p align="center">
-  <a href="https://github.com/albertnahas/teamclaude/raw/master/assets/demo.mp4">
-    <img src="https://github.com/albertnahas/teamclaude/raw/master/assets/demo.mp4" alt="TeamClaude Demo" width="800" />
-  </a>
+  <img src="assets/demo.gif" alt="TeamClaude Demo" width="800" />
 </p>
 
 ## One-line install
