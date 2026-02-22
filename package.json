@@ -1,6 +1,6 @@
 {
   "name": "teamclaude",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Autonomous sprint plugin for Claude Code — real-time visualization of agent teams",
   "type": "module",
   "bin": {
