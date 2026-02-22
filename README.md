@@ -10,6 +10,11 @@
 
 Autonomous sprint plugin for Claude Code. Orchestrates manager + engineer agent teams with a real-time visualization dashboard.
 
+```bash
+npx teamclaude init && claude
+# then type: /sprint
+```
+
 ## Prerequisites
 
 ### 1. Enable Agent Teams in Claude Code
