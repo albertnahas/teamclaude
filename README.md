@@ -14,6 +14,16 @@ Autonomous sprint plugin for Claude Code. Orchestrates manager + engineer agent 
   <img src="assets/demo.gif" alt="TeamClaude Demo" width="800" />
 </p>
 
+## When to use TeamClaude
+
+| Use it for | Don't use it for |
+|---|---|
+| Multi-task sprints (3+ related tasks) | Single quick fixes or one-liners |
+| Feature batches with review cycles | Exploratory research or brainstorming |
+| Bug-bash sessions across a codebase | Tasks requiring constant human decisions |
+| Refactoring with test validation | Projects without tests or type-checking |
+| Autonomous overnight/background work | Highly sensitive code needing line-by-line review |
+
 ## One-line install
 
 ```bash
