@@ -180,6 +180,25 @@ if (command === "init") {
   const force = args.includes("--force");
   const target = isGlobal ? join(homedir(), ".claude") : join(process.cwd(), ".claude");
 
+  // --- Enable Agent Teams in ~/.claude/settings.json ---
+  const settingsPath = join(homedir(), ".claude", "settings.json");
+  try {
+    mkdirSync(dirname(settingsPath), { recursive: true });
+    let settings = {};
+    if (existsSync(settingsPath)) {
+      try { settings = JSON.parse(readFileSync(settingsPath, "utf-8")); } catch {}
+    }
+    if (!settings.env) settings.env = {};
+    if (settings.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS !== "1") {
+      settings.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = "1";
+      writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
+      console.log("  enabled Agent Teams in ~/.claude/settings.json");
+    }
+  } catch (err) {
+    console.warn(`  warning: could not update settings.json — ${err.message}`);
+    console.warn("  manually add CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 to ~/.claude/settings.json");
+  }
+
   // Handle --template flag
   const templateFlagIdx = args.indexOf("--template");
   if (templateFlagIdx !== -1) {
@@ -299,8 +318,8 @@ if (command === "init") {
 
   console.log(`\nDone — ${installed} files installed, ${skipped} skipped`);
   if (installed > 0) {
-    console.log(`Sprint agents installed to ${target}/`);
-    console.log("Run /sprint in Claude Code to start a sprint.");
+    console.log(`\nSprint agents installed to ${target}/`);
+    console.log("\nReady! Open Claude Code and type: /sprint");
   }
   process.exit(0);
 }

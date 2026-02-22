@@ -10,36 +10,23 @@
 
 Autonomous sprint plugin for Claude Code. Orchestrates manager + engineer agent teams with a real-time visualization dashboard.
 
+## One-line install
+
 ```bash
-npx teamclaude init && claude
-# then type: /sprint
+npx teamclaude init
 ```
+
+That's it. This single command:
+- Enables Agent Teams in `~/.claude/settings.json`
+- Scaffolds agents, commands, and skills into `.claude/`
+- Creates `.teamclaude/` for sprint history
+
+Then start Claude Code and type `/sprint`.
 
 ## Prerequisites
 
-### 1. Enable Agent Teams in Claude Code
-
-Agent Teams is an **experimental feature** that must be enabled before use. Add to your `~/.claude/settings.json`:
-
-```json
-{
-  "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
-  }
-}
-```
-
-Or set the environment variable in your shell:
-
-```bash
-export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
-```
-
-> See the [official Agent Teams documentation](https://code.claude.com/docs/en/agent-teams) for full details.
-
-### 2. Install tmux (recommended)
-
-tmux enables live terminal views of each agent in the dashboard. Without it, agents run as background processes and terminal features are hidden.
+- **Node.js 18+**
+- **tmux** (recommended) — enables live terminal views of each agent in the dashboard
 
 ```bash
 # macOS
@@ -49,30 +36,16 @@ brew install tmux
 sudo apt install tmux
 ```
 
-### 3. Node.js 18+
+Without tmux, agents run as background processes and terminal features are hidden.
 
-```bash
-node --version   # Must be >= 18
-```
+## Alternative install
 
-## Install
-
-### Option A: npm (recommended)
-
-```bash
-npx teamclaude init        # Scaffold agents/commands/skills into .claude/
-```
-
-Then use `/sprint` in Claude Code.
-
-### Option B: Plugin
+### Plugin
 
 ```bash
 claude plugin marketplace add albertnahas/teamclaude
 claude plugin install teamclaude@teamclaude
 ```
-
-Auto-registers agents, commands, and skills. Uses `npx teamclaude` for the server.
 
 ### Standalone server
 
