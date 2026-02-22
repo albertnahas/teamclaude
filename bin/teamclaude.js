@@ -329,11 +329,10 @@ if (command === "replay") {
   const replayPath = join(__dirname, "..", "dist", "replay-server.js");
   process.argv = [process.argv[0], replayPath, ...replayArgs];
   await import(replayPath);
-  process.exit(0);
+} else {
+  // Default: start server
+  const serverArgs = args.filter((a) => a !== "start");
+  const serverPath = join(__dirname, "..", "dist", "server.js");
+  process.argv = [process.argv[0], serverPath, ...serverArgs];
+  await import(serverPath);
 }
-
-// Default: start server
-const serverArgs = args.filter((a) => a !== "start");
-const serverPath = join(__dirname, "..", "dist", "server.js");
-process.argv = [process.argv[0], serverPath, ...serverArgs];
-await import(serverPath);

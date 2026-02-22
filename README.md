@@ -10,6 +10,10 @@
 
 Autonomous sprint plugin for Claude Code. Orchestrates manager + engineer agent teams with a real-time visualization dashboard.
 
+<p align="center">
+  <img src="assets/screenshot-sprint.png" alt="TeamClaude Dashboard" width="800" />
+</p>
+
 ## One-line install
 
 ```bash
@@ -111,6 +115,26 @@ When tmux is installed, agents launch inside a tmux session instead of a backgro
 If tmux is not installed, the dashboard works exactly as before — agents run as background processes and terminal features are hidden.
 
 **Requirements:** `tmux` must be on PATH. Install via `brew install tmux` (macOS) or `apt install tmux` (Linux).
+
+### Screenshots
+
+**Kanban board** — drag-free visual overview of task status across columns
+
+<p align="center">
+  <img src="assets/screenshot-kanban.png" alt="Kanban Board View" width="800" />
+</p>
+
+**Agent detail** — click any agent to see their filtered message history and token usage
+
+<p align="center">
+  <img src="assets/screenshot-agent-detail.png" alt="Agent Detail View" width="800" />
+</p>
+
+**Completed sprint** — all tasks done, full message timeline, cost breakdown
+
+<p align="center">
+  <img src="assets/screenshot-dashboard.png" alt="Completed Sprint" width="800" />
+</p>
 
 ## CLI Commands
 

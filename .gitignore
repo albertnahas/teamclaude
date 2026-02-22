@@ -5,4 +5,5 @@ dist/
 .sprint.yml
 .teamclaude/
 .playwright-mcp/
-*.png
+/*.png
+/page-*.png

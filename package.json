@@ -21,7 +21,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "npm run build:server --prefix dashboard && esbuild server/index.ts --bundle --platform=node --format=esm --outfile=dist/server.js --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\" && cp server/ui.html dist/ui.html",
+    "build": "npm run build:server --prefix dashboard && esbuild server/index.ts --bundle --platform=node --format=esm --outfile=dist/server.js --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\" && esbuild server/replay-server.ts --bundle --platform=node --format=esm --outfile=dist/replay-server.js --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\" && cp server/ui.html dist/ui.html",
     "dev": "node --import tsx server/index.ts",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
