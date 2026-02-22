@@ -642,12 +642,13 @@ describe("POST /api/resume", () => {
 });
 
 describe("POST /api/stop", () => {
-  it("resets state, generates retro and PR summary, returns ok", async () => {
+  it("resets state, generates retro, responds immediately without waiting for PR summary", async () => {
     vi.mocked(generatePRSummary).mockResolvedValueOnce("PR summary text");
     vi.mocked(generateRetro).mockReturnValueOnce("Sprint retro");
     const r = await json("POST", "/api/stop");
     expect(r.status).toBe(200);
-    expect(r.json).toMatchObject({ ok: true, prSummary: "PR summary text", retro: "Sprint retro" });
+    expect(r.json).toMatchObject({ ok: true, retro: "Sprint retro" });
+    expect(r.json.prSummary).toBeUndefined();
     expect(resetState).toHaveBeenCalled();
     expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({ type: "init" }));
   });
@@ -666,7 +667,7 @@ describe("POST /api/stop", () => {
     vi.mocked(generateRetro).mockReturnValueOnce("retro");
     const r = await json("POST", "/api/stop");
     expect(r.status).toBe(200);
-    expect(r.json).toMatchObject({ ok: true, prSummary: "" });
+    expect(r.json).toMatchObject({ ok: true, retro: "retro" });
   });
 });
 

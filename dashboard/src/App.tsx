@@ -1,4 +1,4 @@
-import { useCallback, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { SprintState, WsEvent, AppPhase, MergeConflict } from "./types";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useTheme } from "./hooks/useTheme";
@@ -105,6 +105,66 @@ function TokenBudgetWarning({ level, onDismiss }: { level: "approaching" | "exce
   );
 }
 
+function AgentDetailView({
+  agentName,
+  agents,
+  messages,
+  tokenUsage,
+  onBack,
+}: {
+  agentName: string;
+  agents: SprintState["agents"];
+  messages: SprintState["messages"];
+  tokenUsage: SprintState["tokenUsage"];
+  onBack: () => void;
+}) {
+  const agent = agents.find((a) => a.name === agentName);
+  const agentMessages = messages.filter((m) => m.from === agentName || m.to === agentName);
+  const tokens = tokenUsage.byAgent[agentName] ?? 0;
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
+  }, [agentMessages.length]);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div className="terminal-header">
+        <button className="terminal-back-btn" onClick={onBack}>← Back</button>
+        <span className="terminal-agent-name">{agentName}</span>
+        {agent && (
+          <span style={{
+            marginLeft: 8,
+            fontSize: 10,
+            fontFamily: "var(--font-mono)",
+            color: agent.status === "active" ? "var(--green)" : "var(--text-muted)",
+          }}>
+            {agent.status}
+          </span>
+        )}
+        {tokens > 0 && (
+          <span className="terminal-pane-hint">{tokens.toLocaleString()} tok</span>
+        )}
+      </div>
+      <div ref={listRef} style={{ flex: 1, overflowY: "auto", padding: "8px 12px" }}>
+        {agentMessages.length === 0 ? (
+          <div className="empty-state">No messages yet</div>
+        ) : agentMessages.map((m) => (
+          <div key={m.id} style={{ padding: "4px 0", fontSize: 12, lineHeight: 1.5 }}>
+            <div className="message-meta">
+              <span className="message-from">{m.from}</span>
+              <span className="message-arrow">→</span>
+              <span className="message-to">{m.to}</span>
+              {m.protocol && <span className="message-protocol">{m.protocol}</span>}
+            </div>
+            <div className="message-content">{m.content.slice(0, 300)}{m.content.length > 300 ? "…" : ""}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function MergeConflictBar({ conflict }: { conflict: MergeConflict }) {
   return (
     <div
@@ -200,6 +260,34 @@ export default function App() {
   const replayEventCount = useRef(0);
   const replayTotalEvents = useRef(0);
   const taskSearchRef = useRef<HTMLInputElement>(null);
+  const [sidebarWidth, setSidebarWidth] = useState(300);
+  const [msgHeight, setMsgHeight] = useState(280);
+  const dragRef = useRef<{ type: "h" | "v"; startPos: number; startSize: number } | null>(null);
+
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      e.preventDefault();
+      if (d.type === "h") {
+        setSidebarWidth(Math.max(180, Math.min(600, d.startSize + e.clientX - d.startPos)));
+      } else {
+        setMsgHeight(Math.max(80, Math.min(600, d.startSize + d.startPos - e.clientY)));
+      }
+    };
+    const onMouseUp = () => {
+      if (!dragRef.current) return;
+      dragRef.current = null;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
 
   const handleWsEvent = useCallback((event: WsEvent) => {
     if (event.type === "replay_complete") {
@@ -218,6 +306,10 @@ export default function App() {
       else if (event.state.phase !== "idle") setAppPhase("sprint");
       // Reset budget warning when state is re-initialized
       if (!event.state.tokenBudgetApproaching && !event.state.tokenBudgetExceeded) setBudgetWarningDismissed(false);
+    }
+    // When server signals process exited and no team is active, return to setup
+    if (event.type === "process_exited" && !sprintState.teamName) {
+      setAppPhase("setup");
     }
     if (event.type === "token_budget_approaching" || event.type === "token_budget_exceeded") {
       setBudgetWarningDismissed(false);
@@ -275,11 +367,15 @@ export default function App() {
   };
 
   const handleStop = async () => {
-    const res = await fetch("/api/stop", { method: "POST" });
-    const data = (await res.json().catch(() => ({}))) as RetroData;
-    if (data.retro || data.prSummary) {
-      setRetroData(data);
-    } else {
+    try {
+      const res = await fetch("/api/stop", { method: "POST" });
+      const data = (await res.json().catch(() => ({}))) as RetroData;
+      if (data.retro || data.prSummary) {
+        setRetroData(data);
+      } else {
+        setAppPhase("setup");
+      }
+    } catch {
       setAppPhase("setup");
     }
   };
@@ -305,7 +401,12 @@ export default function App() {
   });
 
   if (appPhase === "setup") {
-    return <SetupPhase onLaunch={handleLaunch} theme={theme} onToggleTheme={toggleTheme} />;
+    return (
+      <>
+        <SetupPhase onLaunch={handleLaunch} theme={theme} onToggleTheme={toggleTheme} />
+        {retroData && <RetroModal data={retroData} onClose={handleRetroClose} />}
+      </>
+    );
   }
 
   if (appPhase === "planning") {
@@ -368,7 +469,7 @@ export default function App() {
         onShowMemory={() => setShowMemory(true)}
       />
 
-      <div className="container">
+      <div className="container" style={{ "--sidebar-w": `${sidebarWidth}px`, "--msg-h": `${msgHeight}px` } as React.CSSProperties}>
         <div className="panel agents-panel" style={{ overflow: "hidden" }}>
           {openTerminalAgent && sprintState.tmuxSessionName ? (
             <TerminalView
@@ -378,17 +479,29 @@ export default function App() {
               paneIndex={null}
               availablePanes={terminalState.panes}
             />
+          ) : openTerminalAgent ? (
+            <AgentDetailView
+              agentName={openTerminalAgent}
+              agents={sprintState.agents}
+              messages={sprintState.messages}
+              tokenUsage={sprintState.tokenUsage}
+              onBack={() => setOpenTerminalAgent(null)}
+            />
           ) : (
             <AgentTopology
               agents={sprintState.agents}
               tokenUsage={sprintState.tokenUsage}
               tmuxAvailable={sprintState.tmuxAvailable}
-              onAgentClick={sprintState.tmuxSessionName ? setOpenTerminalAgent : undefined}
+              onAgentClick={setOpenTerminalAgent}
             />
           )}
         </div>
 
-        <div className="resize-h" />
+        <div className="resize-h" onMouseDown={(e) => {
+          dragRef.current = { type: "h", startPos: e.clientX, startSize: sidebarWidth };
+          document.body.style.cursor = "col-resize";
+          document.body.style.userSelect = "none";
+        }} />
 
         <TasksPanel
           tasks={sprintState.tasks}
@@ -397,7 +510,11 @@ export default function App() {
           searchInputRef={taskSearchRef}
         />
 
-        <div className="resize-v" />
+        <div className="resize-v" onMouseDown={(e) => {
+          dragRef.current = { type: "v", startPos: e.clientY, startSize: msgHeight };
+          document.body.style.cursor = "row-resize";
+          document.body.style.userSelect = "none";
+        }} />
 
         <MessageFeed messages={sprintState.messages} />
       </div>

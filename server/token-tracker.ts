@@ -51,6 +51,8 @@ export function accumulateTokenUsage(
   if (!state.tokenBudgetExceeded) {
     const budgetConfig = loadBudgetConfig(process.cwd());
     if (budgetConfig) {
+      // Cache budget config in state so frontend can display it
+      if (!state.tokenBudgetConfig) state.tokenBudgetConfig = budgetConfig;
       const result = checkBudget(state.tokenUsage, budgetConfig);
       if (result === "exceeded" && !state.paused) {
         state.paused = true;

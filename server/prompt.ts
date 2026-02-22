@@ -207,6 +207,37 @@ Your workflow:
 3. For each task: call TaskUpdate to set owner to an agent name, then send "TASK_ASSIGNED: #id — subject" to that agent
 4. When an agent sends "READY_FOR_REVIEW: #id", begin reviewing RIGHT AWAY — the engineer is idle and blocked until you respond.
 5. Send "APPROVED: #id" or "REQUEST_CHANGES: #id — specific feedback" back
+6. After APPROVED: immediately assign the next task in the SAME response — do not wait for acknowledgment. The server marks tasks completed automatically.
+7. When ALL tasks have status completed, send "SPRINT_COMPLETE" to team-lead
+${distributionRule}
+
+## Mandatory Review Protocol (complete ALL steps IN ORDER before APPROVED)
+
+1. Read the diff — identify changed files, understand what was modified.
+2. Read the actual code — open and read the main files. Do NOT skip this step.
+3. Run type-check — if errors, send REQUEST_CHANGES with error output.
+4. Run tests — if failures, send REQUEST_CHANGES with failure output.
+5. Verify acceptance criteria — re-read the task, confirm every criterion met.
+6. If UI changes: grep the stylesheet for every new className. Missing = REQUEST_CHANGES.
+7. If constants/config added: search for duplicates. Single source of truth.
+
+Only after ALL steps pass may you send APPROVED.
+
+WARNING: The server runs automated verification after every APPROVED. If type-check or tests fail, the task is reverted to in_progress. Rubber-stamping wastes review rounds.
+
+CRITICAL: Use TaskUpdate for all status changes EXCEPT completing tasks — the server completes them automatically after APPROVED. Use TaskList to monitor progress.
+Never call TaskUpdate to mark a task as completed. The server handles this.
+${REFLECTION_INSTRUCTION}`;
+
+  const mgrPromptManual = `You are the Manager for team "${teamName}".
+${agentListStr}${mgrLearnings}${mgrMemories}
+
+Your workflow:
+1. Call TaskList to see all created tasks
+2. For each task: call TaskUpdate to set owner to an agent name, then send "TASK_ASSIGNED: #id — subject" to that agent
+3. When an agent sends "READY_FOR_REVIEW: #id", begin reviewing RIGHT AWAY — the engineer is idle and blocked until you respond.
+4. Send "APPROVED: #id" or "REQUEST_CHANGES: #id — specific feedback" back
+5. After APPROVED: immediately assign the next task in the SAME response — do not wait for acknowledgment. The server marks tasks completed automatically.
 6. When ALL tasks have status completed, send "SPRINT_COMPLETE" to team-lead
 ${distributionRule}
 
@@ -224,35 +255,8 @@ Only after ALL steps pass may you send APPROVED.
 
 WARNING: The server runs automated verification after every APPROVED. If type-check or tests fail, the task is reverted to in_progress. Rubber-stamping wastes review rounds.
 
-CRITICAL: Use TaskUpdate for all status changes. Use TaskList to monitor progress.
-${REFLECTION_INSTRUCTION}`;
-
-  const mgrPromptManual = `You are the Manager for team "${teamName}".
-${agentListStr}${mgrLearnings}${mgrMemories}
-
-Your workflow:
-1. Call TaskList to see all created tasks
-2. For each task: call TaskUpdate to set owner to an agent name, then send "TASK_ASSIGNED: #id — subject" to that agent
-3. When an agent sends "READY_FOR_REVIEW: #id", begin reviewing RIGHT AWAY — the engineer is idle and blocked until you respond.
-4. Send "APPROVED: #id" or "REQUEST_CHANGES: #id — specific feedback" back
-5. When ALL tasks have status completed, send "SPRINT_COMPLETE" to team-lead
-${distributionRule}
-
-## Mandatory Review Protocol (complete ALL steps IN ORDER before APPROVED)
-
-1. Read the diff — identify changed files, understand what was modified.
-2. Read the actual code — open and read the main files. Do NOT skip this step.
-3. Run type-check — if errors, send REQUEST_CHANGES with error output.
-4. Run tests — if failures, send REQUEST_CHANGES with failure output.
-5. Verify acceptance criteria — re-read the task, confirm every criterion met.
-6. If UI changes: grep the stylesheet for every new className. Missing = REQUEST_CHANGES.
-7. If constants/config added: search for duplicates. Single source of truth.
-
-Only after ALL steps pass may you send APPROVED.
-
-WARNING: The server runs automated verification after every APPROVED. If type-check or tests fail, the task is reverted to in_progress. Rubber-stamping wastes review rounds.
-
-CRITICAL: Use TaskUpdate for all status changes. Use TaskList to monitor progress.
+CRITICAL: Use TaskUpdate for all status changes EXCEPT completing tasks — the server completes them automatically after APPROVED. Use TaskList to monitor progress.
+Never call TaskUpdate to mark a task as completed. The server handles this.
 ${REFLECTION_INSTRUCTION}`;
 
   const engLearnings = learnings?.engineer ? learningsSection("apply these improvements to implementation", learnings.engineer) : "";
@@ -266,6 +270,7 @@ Your workflow:
 5. Clean up: remove any dead code, unused imports, or temporary scaffolding you created
 6. Send "READY_FOR_REVIEW: #id — summary of changes" to sprint-manager
 7. STOP — your turn is done. Go idle and wait for the manager's response. Do NOT re-send READY_FOR_REVIEW.
+8. When you receive APPROVED — task is done. Do NOT send any reply. Wait for the next TASK_ASSIGNED.
 
 ## Pre-submit checklist (run ALL before READY_FOR_REVIEW)
 - [ ] Type-check passes clean
@@ -280,7 +285,8 @@ Your workflow:
 IMPORTANT:
 - Do NOT call TaskUpdate to set status to "completed" yourself. The system marks tasks completed when the manager approves.
 - Prefer editing existing files over creating new ones. Reuse existing patterns and abstractions.
-- After sending READY_FOR_REVIEW, STOP. Do not re-send. Wait for the manager.`;
+- After sending READY_FOR_REVIEW, STOP. Do not re-send. Wait for the manager.
+- When you receive APPROVED, do NOT send any response. Simply wait for the next TASK_ASSIGNED.`;
 
   if (includePM) {
     prompt += `

@@ -490,6 +490,32 @@ describe("handleInboxMessage", () => {
     expect(state.reviewTaskIds).not.toContain("5");
   });
 
+  it("TASK_ASSIGNED — deduplicates when task already in_progress with same owner", () => {
+    state.tasks = [{ id: "1", subject: "Do it", status: "in_progress", owner: "sprint-engineer-1", blockedBy: [] }];
+    taskProtocolOverrides.set("1", { status: "in_progress", owner: "sprint-engineer-1" });
+    vi.mocked(safeReadJSON).mockReturnValue([
+      { from: "sprint-manager", content: "TASK_ASSIGNED: #1 — Do it" },
+    ]);
+    handleInboxMessage(inboxPath);
+    // Message is still recorded
+    expect(state.messages).toHaveLength(1);
+    // But no redundant broadcast of task_updated (only message_sent + agent_status)
+    const taskUpdates = vi.mocked(broadcast).mock.calls.filter((c) => c[0].type === "task_updated");
+    expect(taskUpdates).toHaveLength(0);
+  });
+
+  it("TASK_ASSIGNED — allows reassignment to different agent", () => {
+    state.tasks = [{ id: "1", subject: "Do it", status: "in_progress", owner: "sprint-engineer-1", blockedBy: [] }];
+    taskProtocolOverrides.set("1", { status: "in_progress", owner: "sprint-engineer-1" });
+    // Reassign to sprint-engineer-2 via a different inbox
+    vi.mocked(safeReadJSON).mockReturnValue([
+      { from: "sprint-manager", content: "TASK_ASSIGNED: #1 — Do it" },
+    ]);
+    handleInboxMessage("/home/user/.claude/teams/sprint-abc/inboxes/sprint-engineer-2.json");
+    // Different agent → should process
+    expect(state.tasks[0].owner).toBe("sprint-engineer-2");
+  });
+
   it("READY_FOR_REVIEW — deduplicates when task already in reviewTaskIds", () => {
     state.tasks = [{ id: "3", subject: "Review me", status: "in_progress", owner: "sprint-engineer-1", blockedBy: [] }];
     state.reviewTaskIds = ["3"]; // already in review

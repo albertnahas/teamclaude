@@ -43,18 +43,16 @@ function AgentNode({
   agent,
   index,
   total,
-  tmuxAvailable,
   onClick,
 }: {
   agent: AgentInfo;
   index: number;
   total: number;
-  tmuxAvailable: boolean;
   onClick?: () => void;
 }) {
   const isActive = agent.status === "active";
   const { x, y } = agentPosition(index, total);
-  const clickable = tmuxAvailable && !!onClick;
+  const clickable = !!onClick;
 
   const color = roleColor(agent);
   const statusColor =
@@ -180,9 +178,9 @@ export function AgentTopology({ agents, tokenUsage, tmuxAvailable, onAgentClick 
             {agents.filter((a) => a.status === "active").length} active / {agents.length}
           </span>
         )}
-        {tmuxAvailable && (
+        {onAgentClick && (
           <span style={{ color: "var(--text-muted)", fontSize: 10, fontFamily: "var(--font-mono)" }}>
-            click to view terminal
+            {tmuxAvailable ? "click for terminal" : "click for details"}
           </span>
         )}
       </div>
@@ -205,7 +203,6 @@ export function AgentTopology({ agents, tokenUsage, tmuxAvailable, onAgentClick 
                 agent={agent}
                 index={i}
                 total={agents.length}
-                tmuxAvailable={tmuxAvailable}
                 onClick={onAgentClick ? () => onAgentClick(agent.name) : undefined}
               />
             ))}

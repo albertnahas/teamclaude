@@ -157,10 +157,12 @@ function handleStop(res: ServerResponse) {
   state.tmuxAvailable = tmuxWasAvailable;
   broadcast({ type: "init", state });
 
-  generatePRSummary(stateCopy, process.cwd()).catch(() => "").then((prSummary) => {
-    res.writeHead(200, { "Content-Type": "application/json", ...CORS });
-    res.end(JSON.stringify({ ok: true, prSummary, retro: sprintCtx.lastRetro, branch: branchAtStop }));
-  });
+  // Respond immediately — don't block on async PR summary generation
+  res.writeHead(200, { "Content-Type": "application/json", ...CORS });
+  res.end(JSON.stringify({ ok: true, retro: sprintCtx.lastRetro, branch: branchAtStop }));
+
+  // Fire-and-forget: generate PR summary for next time
+  generatePRSummary(stateCopy, process.cwd()).catch(() => {});
 }
 
 export function handleRequest(req: IncomingMessage, res: ServerResponse) {

@@ -68,6 +68,7 @@ export interface SprintState {
   tmuxSessionName: string | null;
   tokenBudgetApproaching?: boolean;
   tokenBudgetExceeded?: boolean;
+  tokenBudgetConfig?: { tokens?: number; usd?: number };
   webhookStatus?: {
     lastEvent?: string;
     lastStatus?: "success" | "error";
@@ -222,6 +223,7 @@ export function resetState() {
   state.tmuxSessionName = null;
   state.tokenBudgetApproaching = false;
   state.tokenBudgetExceeded = false;
+  state.tokenBudgetConfig = undefined;
   state.webhookStatus = { deliveryCount: 0 };
   setTeamInitMessageSent(false);
   taskProtocolOverrides.clear();

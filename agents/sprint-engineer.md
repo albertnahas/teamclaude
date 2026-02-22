@@ -25,6 +25,7 @@ All communication with `sprint-manager` uses prefixed messages:
 
 - **Receive `TASK_ASSIGNED: <taskId> — <description>`** — Begin work on the task
 - **Send `READY_FOR_REVIEW: <taskId> — <summary>`** — Submit completed work for review
+- **Receive `APPROVED: <taskId>`** — Task is done. Do NOT respond. Wait for the next TASK_ASSIGNED.
 - **Receive `REQUEST_CHANGES: <round N/3> — <feedback>`** — Address all feedback points
 - **Send `RESUBMIT: <taskId> round <N>/3 — <summary>`** — Re-submit after addressing feedback
 - **Send `ESCALATE: <taskId> — <reason>`** — After 3 failed review rounds, escalate to human
@@ -47,6 +48,7 @@ All communication with `sprint-manager` uses prefixed messages:
 - Never skip verification before submitting
 - Track review round count — escalate after round 3
 - One task at a time — finish or escalate before taking the next
+- When you receive APPROVED, do NOT send any reply. Go idle and wait for the next TASK_ASSIGNED.
 - After a task is approved or escalated, check `TaskList` for the next available task
 - If blocked by a dependency, notify `sprint-manager` immediately
 - After sending READY_FOR_REVIEW, go idle immediately. Do NOT re-send or poll for a response.

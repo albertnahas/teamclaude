@@ -85,6 +85,7 @@ export interface SprintState {
   tmuxSessionName: string | null;
   tokenBudgetApproaching?: boolean;
   tokenBudgetExceeded?: boolean;
+  tokenBudgetConfig?: { tokens?: number; usd?: number };
   webhookStatus?: {
     lastEvent?: string;
     lastStatus?: "success" | "error";

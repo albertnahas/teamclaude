@@ -93,10 +93,13 @@ export function handleInboxMessage(filePath: string) {
         let inferredOwner: string | null = null;
 
         switch (message.protocol) {
-          case "TASK_ASSIGNED":
+          case "TASK_ASSIGNED": {
+            const prev = taskProtocolOverrides.get(tid);
+            if (prev?.status === "in_progress" && prev?.owner === message.to) break; // dedup — already assigned to same agent
             inferredStatus = "in_progress";
             inferredOwner = message.to;
             break;
+          }
           case "READY_FOR_REVIEW":
             if (state.reviewTaskIds.includes(tid)) break; // dedup — already in review
             inferredStatus = "in_progress";

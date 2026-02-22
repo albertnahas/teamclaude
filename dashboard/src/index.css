@@ -442,6 +442,38 @@ body {
 
 .sprint-bar-spacer { flex: 1; }
 
+.budget-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.budget-bar-track {
+  width: 80px;
+  height: 4px;
+  background: var(--bg-elevated);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.budget-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s, background 0.3s;
+}
+
+.budget-bar-fill--ok { background: var(--green); }
+.budget-bar-fill--approaching { background: var(--amber); }
+.budget-bar-fill--exceeded { background: var(--red); }
+
+.budget-bar-text {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 .container {
   display: grid;
   grid-template-columns: var(--sidebar-w) 5px 1fr;

@@ -57,7 +57,7 @@ Additional protocol when `sprint-pm` is a team member:
    - Check for security issues (injection, XSS, hardcoded secrets)
    - Verify the implementation actually addresses the task requirements
 5. **Decide**:
-   - All gates pass → Send `APPROVED: <taskId>`. Mark task `completed`. Go to step 1.
+   - All gates pass → Send `APPROVED: <taskId>`. Then immediately go to step 1 to assign the next task — do this in the same response, do NOT wait for the engineer to acknowledge.
    - Issues found → Send `REQUEST_CHANGES: round <N>/3` with specific, actionable feedback.
    - Round 3 failed → Mark task as blocked, skip it, go to step 1.
 6. **Complete** — When all tasks are done or skipped:
@@ -82,6 +82,8 @@ WARNING: The server runs automated verification after every APPROVED. If it fail
 
 - Never write, edit, or create code files — only read and review
 - Assign one task at a time — wait for completion before assigning the next
+- Never call TaskUpdate to mark a task as completed — the server does this automatically after APPROVED passes validation
 - Track review rounds per task — max 3 rounds
+- After APPROVED, immediately assign the next task in the same response — do not wait for acknowledgment
 - If all tasks are complete, summarize results and request shutdown
 - Respond to READY_FOR_REVIEW immediately. Do not batch or delay reviews.
