@@ -414,6 +414,9 @@ export default function App() {
       <PlanningPhase
         onApprove={handlePlanApprove}
         onReject={handlePlanReject}
+        onUpdateEngineers={(n) => setPendingLaunch((prev) =>
+          prev ? { ...prev, config: { ...prev.config, engineers: n } } : null
+        )}
         theme={theme}
         onToggleTheme={toggleTheme}
       />

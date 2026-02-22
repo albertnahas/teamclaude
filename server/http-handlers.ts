@@ -10,7 +10,7 @@ import { compileSprintPrompt, loadCustomRoles } from "./prompt.js";
 import { recordSprintCompletion, loadSprintHistory, saveSprintSnapshot, saveRetroToHistory, saveRecordToHistory } from "./analytics.js";
 import { createSprintBranch, generatePRSummary, getCurrentBranch } from "./git.js";
 import { getRoleLearnings, extractProcessLearnings, loadProcessLearnings, saveAndRemoveLearning } from "./learnings.js";
-import { analyzeSprintTasks, buildExecutionPlan, inferDependencies, applyInferredDependencies } from "./planner.js";
+import { analyzeSprintTasks, buildExecutionPlan, inferDependencies, applyInferredDependencies, recommendEngineers } from "./planner.js";
 import { routeTaskToModel, loadModelOverrides } from "./model-router.js";
 import { generateRetro, parseRetro } from "./retro.js";
 import { diffRetros } from "./retro-diff.js";
@@ -267,11 +267,13 @@ export function handleRequest(req: IncomingMessage, res: ServerResponse) {
     const inferred = inferDependencies(state.tasks);
     const tasksWithDeps = applyInferredDependencies(state.tasks, inferred);
     const overrides = loadModelOverrides(join(process.cwd(), ".sprint.yml"));
+    const executionPlan = buildExecutionPlan(tasksWithDeps);
     res.writeHead(200, { "Content-Type": "application/json", ...CORS });
     res.end(JSON.stringify({
       sprintPlan: analyzeSprintTasks(tasksWithDeps),
-      executionPlan: buildExecutionPlan(tasksWithDeps),
+      executionPlan,
       modelRouting: Object.fromEntries(tasksWithDeps.map((t) => [t.id, routeTaskToModel(t, overrides)])),
+      recommendedEngineers: recommendEngineers(executionPlan),
     }));
   } else if (url === "/api/plan/approve" && req.method === "POST") {
     res.writeHead(501, { "Content-Type": "application/json", ...CORS });

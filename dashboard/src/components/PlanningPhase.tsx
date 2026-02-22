@@ -37,11 +37,13 @@ interface PlanData {
   sprintPlan: SprintPlan;
   executionPlan: ExecutionPlan;
   modelRouting: Record<string, ModelDecision>;
+  recommendedEngineers: number;
 }
 
 interface PlanningPhaseProps {
   onApprove: () => void;
   onReject: () => void;
+  onUpdateEngineers?: (n: number) => void;
   theme: Theme;
   onToggleTheme: () => void;
 }
@@ -56,14 +58,18 @@ function shortModel(model: string): string {
   return model.replace(/^claude-/, "");
 }
 
-export function PlanningPhase({ onApprove, onReject, theme, onToggleTheme }: PlanningPhaseProps) {
+export function PlanningPhase({ onApprove, onReject, onUpdateEngineers, theme, onToggleTheme }: PlanningPhaseProps) {
   const [plan, setPlan] = useState<PlanData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/plan")
       .then((r) => r.json())
-      .then((data) => setPlan(data as PlanData))
+      .then((data) => {
+        const d = data as PlanData;
+        setPlan(d);
+        if (d.recommendedEngineers > 1) onUpdateEngineers?.(d.recommendedEngineers);
+      })
       .catch(() => setError("Failed to load plan"));
   }, []);
 
@@ -110,8 +116,11 @@ export function PlanningPhase({ onApprove, onReject, theme, onToggleTheme }: Pla
           {theme === "dark" ? "☀" : "☾"}
         </button>
         <span className="planning-meta">
-          {sprintPlan.analyses.length} tasks &middot; total complexity{" "}
+          {sprintPlan.analyses.length} tasks &middot; complexity{" "}
           <strong>{sprintPlan.totalEstimatedComplexity}</strong>
+          {plan.recommendedEngineers > 1 && (
+            <> &middot; recommended <strong>{plan.recommendedEngineers}</strong> engineers</>
+          )}
         </span>
       </div>
 

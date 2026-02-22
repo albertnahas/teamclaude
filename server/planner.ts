@@ -213,6 +213,12 @@ export function buildExecutionPlan(tasks: TaskInfo[]): ExecutionPlan {
   return { batches, criticalPath, timeline };
 }
 
+export function recommendEngineers(plan: ExecutionPlan, maxEngineers = 5): number {
+  if (plan.batches.length === 0) return 1;
+  const maxParallel = Math.max(...plan.batches.map((b) => b.length));
+  return Math.min(Math.max(1, maxParallel), maxEngineers);
+}
+
 export function analyzeSprintTasks(tasks: TaskInfo[]): SprintPlan {
   const workTasks = tasks.filter((t) => !isInternalTask(t));
 
