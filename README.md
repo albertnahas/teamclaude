@@ -4,19 +4,44 @@
 
 <h1 align="center">TeamClaude</h1>
 
-[![npm version](https://img.shields.io/npm/v/teamclaude)](https://www.npmjs.com/package/teamclaude)
-[![CI](https://github.com/albertnahas/teamclaude/actions/workflows/ci.yml/badge.svg)](https://github.com/albertnahas/teamclaude/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+<p align="center">
+  <strong>Stop flying blind with AI agent teams.</strong><br/>
+  Real-time observability and structured sprints for Claude Code.
+</p>
 
-Autonomous sprint plugin for Claude Code. Orchestrates manager + engineer agent teams with a real-time visualization dashboard.
+<p align="center">
+  <a href="https://www.npmjs.com/package/teamclaude"><img src="https://img.shields.io/npm/v/teamclaude" alt="npm version" /></a>
+  <a href="https://github.com/albertnahas/teamclaude/actions/workflows/ci.yml"><img src="https://github.com/albertnahas/teamclaude/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
+</p>
 
 <p align="center">
   <img src="assets/demo.gif" alt="TeamClaude Demo" width="800" />
 </p>
 
+---
+
+Multi-agent Claude Code sessions are powerful but opaque. You can't see what agents are doing, which tasks are stuck, how much they're costing, or whether the work is actually converging. TeamClaude fixes that with a live dashboard and a manager/engineer sprint workflow that keeps agents on track.
+
+## Get started
+
+```bash
+npx teamclaude init
+```
+
+This enables Agent Teams, scaffolds agents and commands into `.claude/`, and creates `.teamclaude/` for sprint history. Then open Claude Code and type:
+
+```
+/sprint Add user authentication, fix payment bug, refactor database layer
+```
+
+The dashboard opens at `http://localhost:3456` and streams everything live.
+
+> **Prerequisites:** Node.js 18+. Optional: [tmux](https://github.com/tmux/tmux) for live terminal views of each agent.
+
 ## When to use TeamClaude
 
-| Use it for | Don't use it for |
+| Good fit | Not a good fit |
 |---|---|
 | Multi-task sprints (3+ related tasks) | Single quick fixes or one-liners |
 | Feature batches with review cycles | Exploratory research or brainstorming |
@@ -24,184 +49,221 @@ Autonomous sprint plugin for Claude Code. Orchestrates manager + engineer agent 
 | Refactoring with test validation | Projects without tests or type-checking |
 | Autonomous overnight/background work | Highly sensitive code needing line-by-line review |
 
-## One-line install
+## What you get
 
-```bash
-npx teamclaude init
-```
+### Live observability dashboard
 
-That's it. This single command:
-- Enables Agent Teams in `~/.claude/settings.json`
-- Scaffolds agents, commands, and skills into `.claude/`
-- Creates `.teamclaude/` for sprint history
+See what every agent is doing, in real time.
 
-Then start Claude Code and type `/sprint`.
-
-## Prerequisites
-
-- **Node.js 18+**
-- **tmux** (recommended) — enables live terminal views of each agent in the dashboard
-
-```bash
-# macOS
-brew install tmux
-
-# Ubuntu / Debian
-sudo apt install tmux
-```
-
-Without tmux, agents run as background processes and terminal features are hidden.
-
-## Alternative install
-
-### Plugin
-
-```bash
-claude plugin marketplace add albertnahas/teamclaude
-claude plugin install teamclaude@teamclaude
-```
-
-### Standalone server
-
-```bash
-npx teamclaude start
-npx teamclaude start --port 4000
-```
-
-## Quick Start
-
-### Manual Mode — you define the work
-
-```
-/sprint Add user authentication, fix payment bug, refactor database layer
-```
-
-Or point to a roadmap file:
-
-```
-/sprint path/to/ROADMAP.md
-```
-
-You'll be shown the parsed task list for approval before anything starts.
-
-### Autonomous Mode — PM agent drives
-
-```
-/sprint
-```
-
-A PM agent analyzes the codebase (reads `CLAUDE.md`, runs tests, scans for TODOs), creates a prioritized roadmap, and hands it to the manager. Runs in continuous cycles until no issues remain.
-
-## What Happens
-
-1. **Project detection** — auto-detects package manager and verification commands from lockfile + `package.json`
-2. **Visualization server** starts at `http://localhost:3456`
-3. **Team created** — agents spawned with the detected project context
-4. **Sprint loop** — manager assigns tasks to engineer(s), reviews code, approves or requests changes (max 3 rounds)
-5. **Dashboard** streams everything live: agent topology, kanban board, message feed
-
-### Dashboard Features
-
-- Live agent nodes with active/idle status pulses
-- **Terminal view** — click any agent node to see their live tmux terminal output and send keystrokes
-- Task board (list or kanban view) with real-time status updates
-- Protocol-tagged message feed (TASK_ASSIGNED, READY_FOR_REVIEW, APPROVED, etc.)
-- **Token cost tracking** — real-time token usage per agent with estimated USD cost (model-aware pricing)
-- **Sprint analytics** — historical completion rates, review rounds, velocity trends across cycles
-- **Retrospective** — auto-generated markdown retro on sprint stop (summary, task results, team performance)
-- **Human checkpoints** — pause the sprint before specific tasks for manual review
-- **Git integration** — auto-creates sprint branches (`sprint/<team>-cycleN`), generates PR summaries on stop
-- Cycle/phase indicator for autonomous mode
-- Resizable panels, escalation alerts, pause/stop controls
-
-### Tmux Terminal Integration
-
-When tmux is installed, agents launch inside a tmux session instead of a background process. This enables:
-
-- **Live terminal view** — click any agent node in the dashboard to see their real-time terminal output (with ANSI color support via xterm.js)
-- **Interactive input** — type directly in the terminal to send keystrokes to the agent's tmux pane
-- **Pane-per-agent** — each agent gets its own tmux pane, auto-mapped when the team is discovered
-
-If tmux is not installed, the dashboard works exactly as before — agents run as background processes and terminal features are hidden.
-
-**Requirements:** `tmux` must be on PATH. Install via `brew install tmux` (macOS) or `apt install tmux` (Linux).
-
-### Screenshots
-
-**Kanban board** — drag-free visual overview of task status across columns
+- **Agent topology** with active/idle status — click any agent to view their live terminal (tmux) or message history
+- **Task board** (list or kanban) with real-time status, protocol tags, and review round tracking
+- **Message feed** showing inter-agent communication (TASK_ASSIGNED, READY_FOR_REVIEW, APPROVED, etc.)
+- **Token cost tracking** per agent with estimated USD cost (model-aware pricing)
 
 <p align="center">
   <img src="assets/screenshot-kanban.png" alt="Kanban Board View" width="800" />
 </p>
 
-**Agent detail** — click any agent to see their filtered message history and token usage
+### Structured sprint workflow
 
-<p align="center">
-  <img src="assets/screenshot-agent-detail.png" alt="Agent Detail View" width="800" />
-</p>
+Agents don't just run — they follow a review loop.
 
-**Completed sprint** — all tasks done, full message timeline, cost breakdown
+1. **Manager** assigns tasks to engineers with context
+2. **Engineer** implements and submits for review
+3. **Manager** approves or requests changes (max 3 rounds)
+4. If stuck after 3 rounds, it **escalates to you**
+
+This prevents the common failure mode: agents running indefinitely without converging.
+
+### Sprint analytics and retros
+
+Every sprint generates data.
+
+- **Retrospective** — auto-generated markdown on sprint stop (summary, task results, team performance, improvement suggestions)
+- **Sprint history** — completion rates, review rounds, velocity trends across cycles
+- **Sprint replay** — re-watch any recorded sprint in the dashboard at adjustable speed
+- **Git integration** — auto-creates sprint branches, generates PR summaries
 
 <p align="center">
   <img src="assets/screenshot-dashboard.png" alt="Completed Sprint" width="800" />
 </p>
 
-## CLI Commands
+### Cost control
 
-```bash
-npx teamclaude start [--port N]                    # Start visualization server (default: 3456)
-npx teamclaude init [--global] [--force]           # Scaffold agents/commands/skills into .claude/
-npx teamclaude init --template <name>              # Init .sprint.yml from a pre-built template
-npx teamclaude init --template list                # List available templates
-npx teamclaude replay <file.jsonl> [--speed N]     # Replay a recorded sprint in the dashboard
-npx teamclaude replay examples/small-bug-fix.jsonl # Try a bundled example replay
-npx teamclaude --version                           # Print version
+- **Token budget** — auto-pause when spend exceeds a threshold, with dashboard warnings at 80%
+- **Human checkpoints** — pause before specific tasks for manual review
+- **Model routing** — automatically assigns haiku/sonnet/opus per task based on complexity
+
+## Modes
+
+### Manual — you define the work
+
+```
+/sprint Add user auth, fix payment bug, refactor DB layer
+/sprint path/to/ROADMAP.md
 ```
 
-### `init` options
+You see the parsed task list and approve before anything starts.
 
-| Flag | Effect |
-|------|--------|
-| `--global` | Install to `~/.claude/` instead of `./.claude/` |
-| `--force` | Overwrite existing files |
-| `--template <name>` | Copy a pre-built template to `.sprint.yml` |
-| `--template list` | List all available templates |
+### Autonomous — PM agent drives
 
-## Project Detection
+```
+/sprint
+```
 
-The `/sprint` command auto-detects your project's tooling before spawning agents:
+A PM agent analyzes the codebase, creates a roadmap, and hands it to the manager. Runs in continuous cycles until no issues remain.
 
-| Signal | Detection |
-|--------|-----------|
-| `pnpm-lock.yaml` | pnpm |
-| `yarn.lock` | yarn |
-| `package-lock.json` | npm |
-| `bun.lockb` | bun |
-| `package.json` scripts | type-check + test commands |
-| `Cargo.toml` | `cargo check` + `cargo test` |
-| `go.mod` | `go vet` + `go test` |
-| `pyproject.toml` | `pytest` |
+## Configuration
 
-For explicit control, add `.sprint.yml` to your project root:
+Auto-detects your project tooling from lockfiles and `package.json`. For explicit control, add `.sprint.yml`:
 
 ```yaml
-verification:
-  type_check: "pnpm type-check"
-  test: "pnpm test --run"
-
 agents:
-  model: sonnet    # haiku | sonnet | opus — affects token cost estimates
+  model: sonnet              # haiku | sonnet | opus
+  roles:                     # custom team composition
+    - engineer
+    - engineer
+    - qa
 
 sprint:
   max_review_rounds: 3
 
+budget:
+  max_tokens: 100000
+  warn_at: 80000
+
+verification:
+  type_check: "npm run type-check"
+  test: "npm test"
+
 server:
-  port: 3456       # also configurable via --port flag
+  port: 3456
 ```
 
-Token cost estimates use per-model pricing (haiku: $0.80/$4, sonnet: $3/$15, opus: $15/$75 per million input/output tokens). The model is read from `agents.model` in `.sprint.yml`, defaulting to sonnet.
+## CLI
 
-## How It Works
+```bash
+npx teamclaude init [--global] [--force]            # Scaffold into .claude/
+npx teamclaude init --template <name|list>           # Use a pre-built template
+npx teamclaude start [--port N]                      # Start server (default: 3456)
+npx teamclaude replay <file.jsonl> [--speed N]       # Replay a recorded sprint
+```
+
+## Alternative install
+
+```bash
+# Claude Code plugin marketplace
+claude plugin marketplace add albertnahas/teamclaude
+claude plugin install teamclaude@teamclaude
+
+# Standalone server
+npx teamclaude start
+```
+
+---
+
+<details>
+<summary><strong>Agent roles</strong></summary>
+
+| Agent | Role |
+|-------|------|
+| **sprint-pm** | Analyzes codebase, creates roadmaps, validates results. Never writes code. (Autonomous mode only) |
+| **sprint-manager** | Delegates tasks, reviews code, drives sprint to completion. Never writes code. |
+| **sprint-engineer** | Implements features, fixes bugs, writes tests. Submits work for review. |
+| **sprint-qa** | Validates acceptance criteria, runs tests, reports defects. Never writes code. |
+| **sprint-tech-writer** | Updates docs, changelogs, inline comments. Never writes code. |
+
+Custom roles: drop an `agents/<role>.md` file and reference it in `.sprint.yml`.
+
+</details>
+
+<details>
+<summary><strong>Message protocol</strong></summary>
+
+Agents communicate via structured prefixed messages:
+
+| Prefix | Direction | Meaning |
+|--------|-----------|---------|
+| `TASK_ASSIGNED:` | Manager → Engineer | Task delegated with context |
+| `READY_FOR_REVIEW:` | Engineer → Manager | Work submitted for review |
+| `APPROVED:` | Manager → Engineer | Work accepted, task complete |
+| `REQUEST_CHANGES:` | Manager → Engineer | Feedback with round counter (N/3) |
+| `RESUBMIT:` | Engineer → Manager | Revised work after feedback |
+| `ESCALATE:` | Either → Human | Stuck after 3 rounds |
+| `ROADMAP_READY:` | PM → Manager | Sprint tasks created (autonomous) |
+| `SPRINT_COMPLETE:` | Manager → PM | All tasks done (autonomous) |
+| `ACCEPTANCE:` | PM → Manager | Validation pass/fail (autonomous) |
+
+</details>
+
+<details>
+<summary><strong>REST API</strong></summary>
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/state` | GET | Full sprint state snapshot |
+| `/api/launch` | POST | Launch a sprint (`{ roadmap, engineers, includePM, cycles }`) |
+| `/api/stop` | POST | Stop sprint, record analytics, generate retro + PR summary |
+| `/api/pause` | POST | Toggle pause/resume |
+| `/api/resume` | POST | Resume persisted sprint after server restart |
+| `/api/process-status` | GET | Running process info (PID, startedAt) |
+| `/api/analytics` | GET | Sprint history (`?cycle=N&limit=N&format=csv`) |
+| `/api/retro` | GET | Last retrospective (`?format=json`) |
+| `/api/retro/gist` | POST | Publish retro to GitHub Gist |
+| `/api/retro/diff` | GET | Diff two sprints (`?a=<id>&b=<id>`) |
+| `/api/history` | GET | All sprint history entries |
+| `/api/history/:id/retro` | GET | Retro for a past sprint |
+| `/api/velocity.svg` | GET | Velocity chart SVG (`?w=N&h=N`) |
+| `/api/plan` | GET | Task dependency analysis + model routing |
+| `/api/task-models` | GET | Model routing per task |
+| `/api/git-status` | GET | Branch status |
+| `/api/checkpoint` | POST | Set human checkpoint (`{ taskId }`) |
+| `/api/checkpoint/release` | POST | Release pending checkpoint |
+| `/api/templates` | GET | Available sprint templates |
+| `/api/memories` | GET/POST | Agent memory store (`?role=X&q=query`) |
+| `/api/memories/:id` | DELETE | Delete a memory |
+
+WebSocket events: `init`, `task_updated`, `message_sent`, `agent_status`, `token_usage`, `checkpoint`, `cycle_info`, `paused`, `escalation`, `terminal_output`, `panes_discovered`, `merge_conflict`.
+
+</details>
+
+<details>
+<summary><strong>Plugin API</strong></summary>
+
+Drop a `.js` file into `.teamclaude/plugins/`:
+
+```javascript
+export default {
+  name: "notify",
+  hooks: {
+    onSprintStart(state) { console.log(`Sprint started: ${state.teamName}`); },
+    onTaskComplete(task) { console.log(`Task done: ${task.subject}`); },
+    onSprintStop(state) { console.log(`Sprint stopped`); },
+  },
+};
+```
+
+Hooks: `onSprintStart`, `onTaskComplete`, `onEscalation`, `onSprintStop`. Errors are caught — they never crash the server.
+
+</details>
+
+<details>
+<summary><strong>GitHub integration</strong></summary>
+
+Auto-create issues from tasks and post retros as PR comments:
+
+```yaml
+github:
+  repo: "your-org/your-repo"
+  pr_number: 42
+```
+
+Set `GITHUB_TOKEN` in your environment (needs `issues:write` and `pull_requests:write`).
+
+</details>
+
+<details>
+<summary><strong>How it works</strong></summary>
 
 ```
 ~/.claude/teams/<team>/config.json     ──┐
@@ -219,183 +281,9 @@ Token cost estimates use per-model pricing (haiku: $0.80/$4, sonnet: $3/$15, opu
                                      └────────────┘
 ```
 
-The server watches Claude Code's native Agent Teams file system and streams deltas to the browser via WebSocket. When tmux is available, it also polls tmux panes for terminal output and relays keyboard input from the browser to agent panes via `send-keys`. On sprint stop, it records analytics to `~/.claude/teamclaude-analytics.json`, generates a retrospective, and creates a PR summary from the sprint branch.
+The server watches Claude Code's native Agent Teams filesystem and streams deltas via WebSocket. When tmux is available, it polls panes for terminal output and relays keyboard input. On sprint stop, it records analytics, generates a retrospective, and creates a PR summary.
 
-### Agent Roles
-
-| Agent | Role |
-|-------|------|
-| **sprint-pm** | Analyzes codebase, creates roadmaps, validates results. Never writes code. (Autonomous mode only) |
-| **sprint-manager** | Delegates tasks, reviews code, drives sprint to completion. Never writes code. |
-| **sprint-engineer** | Implements features, fixes bugs, writes tests. Submits work for review. |
-| **sprint-qa** | Validates acceptance criteria, runs tests, reports defects. Never writes code. |
-| **sprint-tech-writer** | Updates docs, changelogs, inline comments. Never writes code. |
-
-Custom roles can be added by dropping an `agents/<role>.md` definition file and referencing it in `.sprint.yml`:
-
-```yaml
-agents:
-  roles:
-    - engineer
-    - engineer
-    - qa
-    - tech-writer
-```
-
-### Message Protocol
-
-Agents communicate via structured prefixed messages that the dashboard detects and highlights:
-
-| Prefix | Direction | Meaning |
-|--------|-----------|---------|
-| `TASK_ASSIGNED:` | Manager → Engineer | Task delegated with context |
-| `READY_FOR_REVIEW:` | Engineer → Manager | Work submitted for review |
-| `APPROVED:` | Manager → Engineer | Work accepted, task complete |
-| `REQUEST_CHANGES:` | Manager → Engineer | Feedback with round counter (N/3) |
-| `RESUBMIT:` | Engineer → Manager | Revised work after feedback |
-| `ESCALATE:` | Either → Human | Stuck after 3 rounds |
-| `ROADMAP_READY:` | PM → Manager | Sprint tasks created (autonomous) |
-| `SPRINT_COMPLETE:` | Manager → PM | All tasks done (autonomous) |
-| `ACCEPTANCE:` | PM → Manager | Validation pass/fail (autonomous) |
-
-## API
-
-The server exposes a REST API alongside the WebSocket stream:
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/state` | GET | Full sprint state snapshot |
-| `/api/launch` | POST | Launch a sprint (`{ roadmap, engineers, includePM, cycles }`) |
-| `/api/stop` | POST | Stop sprint, record analytics, generate retro + PR summary |
-| `/api/pause` | POST | Toggle pause/resume |
-| `/api/resume` | POST | Resume persisted sprint after server restart |
-| `/api/process-status` | GET | Running process info (PID, startedAt) |
-| `/api/analytics` | GET | Sprint history (`?cycle=N&limit=N&format=csv` filters) |
-| `/api/retro` | GET | Last generated retrospective (`?format=json` for structured) |
-| `/api/retro/gist` | POST | Publish retro to GitHub Gist, returns `{ url }` |
-| `/api/retro/diff` | GET | Diff two sprints (`?a=<sprintId>&b=<sprintId>`) |
-| `/api/history` | GET | List all sprint history entries |
-| `/api/history/:id/retro` | GET | Retro for a specific past sprint |
-| `/api/velocity.svg` | GET | Velocity chart SVG (`?w=N&h=N`) |
-| `/api/plan` | GET | Task dependency analysis + model routing plan |
-| `/api/plan/approve` | POST | Approve the pre-sprint plan |
-| `/api/task-models` | GET | Model routing decision per task |
-| `/api/git-status` | GET | Current branch + sprint branch status |
-| `/api/checkpoint` | POST | Set a human checkpoint on a task (`{ taskId }`) |
-| `/api/checkpoint/release` | POST | Release a pending checkpoint |
-| `/api/dismiss-escalation` | POST | Dismiss an escalation alert |
-| `/api/dismiss-merge-conflict` | POST | Dismiss a merge conflict alert |
-| `/api/learnings` | GET | Process learnings from past sprints |
-| `/api/process-learnings` | GET | Process learnings (alias) |
-| `/api/process-learnings/:id` | DELETE | Remove a specific learning |
-| `/api/memories` | GET | List persistent agent memories (`?role=X&q=query`) |
-| `/api/memories` | POST | Save a memory (`{ role, key, value }`) |
-| `/api/memories/:id` | DELETE | Delete a memory by ID |
-| `/api/templates` | GET | List available sprint templates |
-
-WebSocket events: `init`, `task_updated`, `message_sent`, `agent_status`, `token_usage`, `checkpoint`, `cycle_info`, `paused`, `escalation`, `process_started`, `process_exited`, `terminal_output`, `panes_discovered`, `merge_conflict`, `budget_warning`.
-
-## Architecture
-
-```
-teamclaude/
-├── .claude-plugin/
-│   ├── plugin.json             # Plugin manifest
-│   └── marketplace.json        # Marketplace registry
-├── agents/
-│   ├── sprint-manager.md       # Manager agent definition
-│   ├── sprint-engineer.md      # Engineer agent definition
-│   ├── sprint-pm.md            # PM agent definition
-│   ├── qa.md                   # QA agent definition
-│   └── tech-writer.md          # Tech Writer agent definition
-├── commands/sprint.md          # /sprint slash command
-├── skills/sprint.md            # Skill trigger
-├── templates/                  # Pre-built sprint templates (bug-bash, feature, refactor, security-audit)
-├── server/
-│   ├── index.ts                # HTTP + WebSocket server entry
-│   ├── http-handlers.ts        # All HTTP route handlers
-│   ├── sprint-lifecycle.ts     # Process/tmux launch and pane polling
-│   ├── watcher.ts              # Chokidar file watcher + protocol message handling
-│   ├── state.ts                # SprintState singleton + WsEvent types + broadcast()
-│   ├── protocol.ts             # Message protocol tag detection
-│   ├── prompt.ts               # Sprint prompt compilation for all agent roles
-│   ├── analytics.ts            # Sprint history recording and loading
-│   ├── persistence.ts          # Debounced state save/load to .teamclaude/state.json
-│   ├── storage.ts              # Storage path helpers
-│   ├── git.ts                  # Sprint branch creation + PR summary generation
-│   ├── retro.ts                # Auto-generated sprint retrospectives
-│   ├── retro-diff.ts           # Side-by-side sprint comparison
-│   ├── tmux.ts                 # Tmux session lifecycle + pane I/O
-│   ├── model-router.ts         # Task complexity → model selection (haiku/sonnet/opus)
-│   ├── planner.ts              # Task dependency inference + execution ordering
-│   ├── learnings.ts            # Cross-sprint process learning extraction
-│   ├── memory.ts               # Persistent key-value memory store
-│   ├── plugin-loader.ts        # Plugin auto-discovery from .teamclaude/plugins/
-│   ├── github.ts               # GitHub REST API (issues, PR comments)
-│   ├── notifications.ts        # Outbound webhook dispatching
-│   ├── budget.ts               # Token budget limits with auto-pause
-│   ├── velocity.ts             # Velocity chart SVG generation
-│   ├── gist.ts                 # GitHub Gist export
-│   ├── verification.ts         # Post-task verification gate
-│   ├── templates.ts            # Sprint template loading
-│   ├── replay.ts               # Sprint replay event stream
-│   ├── replay-server.ts        # HTTP server for sprint replay
-│   └── ui.html                 # Dashboard bundle (generated — edit dashboard/src/)
-├── dashboard/src/              # React + TypeScript dashboard (Vite)
-├── bin/teamclaude.js           # CLI entry point
-└── .sprint.example.yml         # Example project config
-```
-
-## Plugin API
-
-Drop a `.js` file into `.teamclaude/plugins/` to hook into sprint lifecycle events:
-
-```javascript
-// .teamclaude/plugins/notify.js
-export default {
-  name: "notify",
-  hooks: {
-    onSprintStart(state) { console.log(`Sprint started: ${state.teamName}`); },
-    onTaskComplete(task) { console.log(`Task done: ${task.subject}`); },
-    onSprintStop(state) { console.log(`Sprint stopped`); },
-  },
-};
-```
-
-Available hooks: `onSprintStart`, `onTaskComplete`, `onEscalation`, `onSprintStop`. Errors in plugins are caught and logged — they never crash the server.
-
-## Sprint Replay
-
-Record a sprint by capturing the events from `/api/state`, then replay it in the dashboard:
-
-```bash
-npx teamclaude replay examples/bug-fix.json
-npx teamclaude replay examples/bug-fix.json --speed 5   # 5× faster
-```
-
-## GitHub Integration
-
-Opt in via `.sprint.yml` to auto-create GitHub issues from tasks and post retros as PR comments:
-
-```yaml
-github:
-  repo: "your-org/your-repo"         # required
-  pr_number: 42                       # optional — post retro to this PR
-```
-
-Set `GITHUB_TOKEN` in your environment. The token needs `issues:write` and `pull_requests:write` scopes.
-
-## Token Budget
-
-Prevent runaway token spend by setting a budget limit in `.sprint.yml`:
-
-```yaml
-budget:
-  max_tokens: 100000      # auto-pause when total tokens exceed this
-  warn_at: 80000          # show dashboard warning at this threshold
-```
-
-When the budget is hit, the sprint pauses and a warning appears in the dashboard. Resume with the Pause/Resume button after adjusting the budget or stopping the sprint.
+</details>
 
 ## License
 
