@@ -5,6 +5,7 @@ import { MODEL_COST, MODEL_LABEL } from "../types";
 interface TasksPanelProps {
   tasks: TaskInfo[];
   reviewTaskIds: string[];
+  preValidatingTaskIds: string[];
   validatingTaskIds: string[];
   searchInputRef?: React.RefObject<HTMLInputElement | null>;
 }
@@ -116,12 +117,14 @@ function CostSummary({
 function TaskRow({
   task,
   isReview,
+  isPreValidating,
   isValidating,
   decision,
   completedIds,
 }: {
   task: TaskInfo;
   isReview: boolean;
+  isPreValidating: boolean;
   isValidating: boolean;
   decision?: ModelRoutingDecision;
   completedIds: Set<string>;
@@ -137,9 +140,14 @@ function TaskRow({
       <span className="task-id">#{task.id}</span>
       <span
         className="status-badge"
-        style={{ background: isValidating ? "var(--purple)" : isReview ? "var(--blue)" : STATUS_COLORS[task.status] }}
+        style={{ background: isPreValidating ? "var(--cyan, #06b6d4)" : isValidating ? "var(--purple)" : isReview ? "var(--blue)" : STATUS_COLORS[task.status] }}
       />
       <span className="task-subject">{task.subject}</span>
+      {isPreValidating && (
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--cyan, #06b6d4)", fontWeight: 600 }}>
+          Verifying...
+        </span>
+      )}
       {isValidating && (
         <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--purple)", fontWeight: 600 }}>
           Validating...
@@ -163,12 +171,14 @@ function TaskRow({
 function KanbanCard({
   task,
   isReview,
+  isPreValidating,
   isValidating,
   decision,
   completedIds,
 }: {
   task: TaskInfo;
   isReview: boolean;
+  isPreValidating: boolean;
   isValidating: boolean;
   decision?: ModelRoutingDecision;
   completedIds: Set<string>;
@@ -192,6 +202,11 @@ function KanbanCard({
     >
       <div className="card-top">
         <span className="card-id">#{task.id}</span>
+        {isPreValidating && (
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--cyan, #06b6d4)", fontWeight: 600 }}>
+            Verifying...
+          </span>
+        )}
         {isValidating && (
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--purple)", fontWeight: 600 }}>
             Validating...
@@ -218,7 +233,7 @@ const STATUS_FILTER_LABELS: Record<StatusFilter, string> = {
   completed: "Done",
 };
 
-export function TasksPanel({ tasks, reviewTaskIds, validatingTaskIds, searchInputRef }: TasksPanelProps) {
+export function TasksPanel({ tasks, reviewTaskIds, preValidatingTaskIds, validatingTaskIds, searchInputRef }: TasksPanelProps) {
   const [view, setView] = useState<"list" | "board">("list");
   const [taskModels, setTaskModels] = useState<Record<string, ModelRoutingDecision>>({});
   const [query, setQuery] = useState("");
@@ -227,6 +242,7 @@ export function TasksPanel({ tasks, reviewTaskIds, validatingTaskIds, searchInpu
   const inputRef = (searchInputRef ?? internalRef) as React.RefObject<HTMLInputElement>;
 
   const reviewSet = new Set(reviewTaskIds);
+  const preValidatingSet = new Set(preValidatingTaskIds);
   const validatingSet = new Set(validatingTaskIds);
   const visible = tasks.filter((t) => t.status !== "deleted");
   const completedIds = new Set(visible.filter((t) => t.status === "completed").map((t) => t.id));
@@ -313,6 +329,7 @@ export function TasksPanel({ tasks, reviewTaskIds, validatingTaskIds, searchInpu
                   key={task.id}
                   task={task}
                   isReview={reviewSet.has(task.id)}
+                  isPreValidating={preValidatingSet.has(task.id)}
                   isValidating={validatingSet.has(task.id)}
                   decision={taskModels[task.id]}
                   completedIds={completedIds}
@@ -347,6 +364,7 @@ export function TasksPanel({ tasks, reviewTaskIds, validatingTaskIds, searchInpu
                         key={task.id}
                         task={task}
                         isReview={reviewSet.has(task.id)}
+                        isPreValidating={preValidatingSet.has(task.id)}
                         isValidating={validatingSet.has(task.id)}
                         decision={taskModels[task.id]}
                         completedIds={completedIds}

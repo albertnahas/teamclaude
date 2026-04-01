@@ -89,6 +89,7 @@ describe("generatePRSummary", () => {
     cycle: 1,
     phase: "sprinting",
     reviewTaskIds: [],
+    preValidatingTaskIds: [],
     validatingTaskIds: [],
     tokenUsage: { total: 0, byAgent: {}, estimatedCostUsd: 0 },
     checkpoints: [],

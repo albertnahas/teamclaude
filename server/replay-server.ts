@@ -65,7 +65,7 @@ const server = createServer((req, res) => {
 
   if (url === "/api/state") {
     res.writeHead(200, { "Content-Type": "application/json", ...cors });
-    res.end(JSON.stringify({ teamName: null, projectName: "replay", agents: [], tasks: [], messages: [], paused: false, escalation: null, mergeConflict: null, mode: "manual", cycle: 0, phase: "idle", reviewTaskIds: [], tokenUsage: { total: 0, byAgent: {}, estimatedCostUsd: 0 }, checkpoints: [], pendingCheckpoint: null, tmuxAvailable: false, tmuxSessionName: null }));
+    res.end(JSON.stringify({ teamName: null, projectName: "replay", agents: [], tasks: [], messages: [], paused: false, escalation: null, mergeConflict: null, mode: "manual", cycle: 0, phase: "idle", reviewTaskIds: [], preValidatingTaskIds: [], tokenUsage: { total: 0, byAgent: {}, estimatedCostUsd: 0 }, checkpoints: [], pendingCheckpoint: null, tmuxAvailable: false, tmuxSessionName: null }));
     return;
   }
 

@@ -56,6 +56,7 @@ export interface SprintState {
   cycle: number;
   phase: "idle" | "analyzing" | "sprinting" | "validating";
   reviewTaskIds: string[];
+  preValidatingTaskIds: string[];
   validatingTaskIds: string[];
   tokenUsage: {
     total: number;
@@ -98,6 +99,7 @@ export type WsEvent =
   | { type: "process_exited"; code: number | null }
   | { type: "terminal_output"; agentName: string; paneIndex: number; content: string }
   | { type: "panes_discovered"; panes: { agentName: string | null; paneIndex: number }[] }
+  | { type: "pre_validation"; taskId: string; passed: boolean; output: string }
   | { type: "task_validation"; taskId: string; passed: boolean; output: string }
   | { type: "webhook_status"; status: SprintState["webhookStatus"] }
   | { type: "token_budget_approaching"; usage: SprintState["tokenUsage"] }
@@ -120,6 +122,7 @@ export const state: SprintState = {
   cycle: 0,
   phase: "idle",
   reviewTaskIds: [],
+  preValidatingTaskIds: [],
   validatingTaskIds: [],
   tokenUsage: { total: 0, byAgent: {}, estimatedCostUsd: 0 },
   checkpoints: [],
@@ -216,6 +219,7 @@ export function resetState() {
   state.cycle = 0;
   state.phase = "idle";
   state.reviewTaskIds = [];
+  state.preValidatingTaskIds = [];
   state.validatingTaskIds = [];
   state.tokenUsage = { total: 0, byAgent: {}, estimatedCostUsd: 0 };
   state.checkpoints = [];

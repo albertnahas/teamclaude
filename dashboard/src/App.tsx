@@ -29,6 +29,7 @@ const initialState: SprintState = {
   cycle: 0,
   phase: "idle",
   reviewTaskIds: [],
+  preValidatingTaskIds: [],
   validatingTaskIds: [],
   tokenUsage: { total: 0, byAgent: {}, estimatedCostUsd: 0 },
   checkpoints: [],
@@ -232,6 +233,8 @@ function sprintReducer(state: SprintState, event: WsEvent): SprintState {
       return { ...state, tokenBudgetApproaching: true, tokenUsage: event.usage };
     case "token_budget_exceeded":
       return { ...state, tokenBudgetApproaching: true, tokenBudgetExceeded: true, paused: true, tokenUsage: event.usage };
+    case "pre_validation":
+      return { ...state, preValidatingTaskIds: state.preValidatingTaskIds.filter((id) => id !== event.taskId) };
     case "task_validation":
       return { ...state, validatingTaskIds: state.validatingTaskIds.filter((id) => id !== event.taskId) };
     default:
@@ -509,6 +512,7 @@ export default function App() {
         <TasksPanel
           tasks={sprintState.tasks}
           reviewTaskIds={sprintState.reviewTaskIds}
+          preValidatingTaskIds={sprintState.preValidatingTaskIds}
           validatingTaskIds={sprintState.validatingTaskIds}
           searchInputRef={taskSearchRef}
         />

@@ -211,19 +211,21 @@ Your workflow:
 7. When ALL tasks have status completed, send "SPRINT_COMPLETE" to team-lead
 ${distributionRule}
 
-## Mandatory Review Protocol (complete ALL steps IN ORDER before APPROVED)
+## Automated Pre-Review Gate
+
+The server automatically runs type-check, lint, and tests when an engineer sends READY_FOR_REVIEW. If verification fails, the task is bounced back to the engineer automatically — you will NOT see it. You only receive tasks that already pass all automated checks.
+
+## Review Protocol (complete ALL steps IN ORDER before APPROVED)
 
 1. Read the diff — identify changed files, understand what was modified.
 2. Read the actual code — open and read the main files. Do NOT skip this step.
-3. Run type-check — if errors, send REQUEST_CHANGES with error output.
-4. Run tests — if failures, send REQUEST_CHANGES with failure output.
-5. Verify acceptance criteria — re-read the task, confirm every criterion met.
-6. If UI changes: grep the stylesheet for every new className. Missing = REQUEST_CHANGES.
-7. If constants/config added: search for duplicates. Single source of truth.
+3. Verify acceptance criteria — re-read the task, confirm every criterion met.
+4. If UI changes: grep the stylesheet for every new className. Missing = REQUEST_CHANGES.
+5. If constants/config added: search for duplicates. Single source of truth.
 
 Only after ALL steps pass may you send APPROVED.
 
-WARNING: The server runs automated verification after every APPROVED. If type-check or tests fail, the task is reverted to in_progress. Rubber-stamping wastes review rounds.
+NOTE: The server also runs verification after APPROVED as a safety net. If it fails, the task is reverted to in_progress.
 
 CRITICAL: Use TaskUpdate for all status changes EXCEPT completing tasks — the server completes them automatically after APPROVED. Use TaskList to monitor progress.
 Never call TaskUpdate to mark a task as completed. The server handles this.
@@ -241,19 +243,21 @@ Your workflow:
 6. When ALL tasks have status completed, send "SPRINT_COMPLETE" to team-lead
 ${distributionRule}
 
-## Mandatory Review Protocol (complete ALL steps IN ORDER before APPROVED)
+## Automated Pre-Review Gate
+
+The server automatically runs type-check, lint, and tests when an engineer sends READY_FOR_REVIEW. If verification fails, the task is bounced back to the engineer automatically — you will NOT see it. You only receive tasks that already pass all automated checks.
+
+## Review Protocol (complete ALL steps IN ORDER before APPROVED)
 
 1. Read the diff — identify changed files, understand what was modified.
 2. Read the actual code — open and read the main files. Do NOT skip this step.
-3. Run type-check — if errors, send REQUEST_CHANGES with error output.
-4. Run tests — if failures, send REQUEST_CHANGES with failure output.
-5. Verify acceptance criteria — re-read the task, confirm every criterion met.
-6. If UI changes: grep the stylesheet for every new className. Missing = REQUEST_CHANGES.
-7. If constants/config added: search for duplicates. Single source of truth.
+3. Verify acceptance criteria — re-read the task, confirm every criterion met.
+4. If UI changes: grep the stylesheet for every new className. Missing = REQUEST_CHANGES.
+5. If constants/config added: search for duplicates. Single source of truth.
 
 Only after ALL steps pass may you send APPROVED.
 
-WARNING: The server runs automated verification after every APPROVED. If type-check or tests fail, the task is reverted to in_progress. Rubber-stamping wastes review rounds.
+NOTE: The server also runs verification after APPROVED as a safety net. If it fails, the task is reverted to in_progress.
 
 CRITICAL: Use TaskUpdate for all status changes EXCEPT completing tasks — the server completes them automatically after APPROVED. Use TaskList to monitor progress.
 Never call TaskUpdate to mark a task as completed. The server handles this.
@@ -269,7 +273,7 @@ Your workflow:
 4. Run the pre-submit checklist below
 5. Clean up: remove any dead code, unused imports, or temporary scaffolding you created
 6. Send "READY_FOR_REVIEW: #id — summary of changes" to sprint-manager
-7. STOP — your turn is done. Go idle and wait for the manager's response. Do NOT re-send READY_FOR_REVIEW.
+7. STOP — your turn is done. The server runs automated verification (type-check, lint, tests). If it fails, you will receive a system message with the failure output — fix the issues and resubmit READY_FOR_REVIEW. If it passes, the task goes to the manager for code review.
 8. When you receive APPROVED — task is done. Do NOT send any reply. Wait for the next TASK_ASSIGNED.
 
 ## Pre-submit checklist (run ALL before READY_FOR_REVIEW)

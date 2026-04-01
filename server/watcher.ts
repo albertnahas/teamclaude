@@ -101,18 +101,10 @@ export function handleInboxMessage(filePath: string) {
             break;
           }
           case "READY_FOR_REVIEW":
-            if (state.reviewTaskIds.includes(tid)) break; // dedup — already in review
+            if (state.reviewTaskIds.includes(tid) || state.preValidatingTaskIds.includes(tid)) break; // dedup
             inferredStatus = "in_progress";
-            state.reviewTaskIds.push(tid);
-            // Checkpoint gate: pause sprint for human review before manager acts
-            if (state.checkpoints.includes(tid)) {
-              state.checkpoints = state.checkpoints.filter((id) => id !== tid);
-              const taskSubject =
-                state.tasks.find((t) => t.id === tid)?.subject ?? `Task #${tid}`;
-              state.pendingCheckpoint = { taskId: tid, taskSubject };
-              broadcast({ type: "checkpoint", checkpoint: state.pendingCheckpoint });
-              notifyWebhook("checkpoint_hit", { taskId: tid, subject: taskSubject });
-            }
+            state.preValidatingTaskIds.push(tid);
+            triggerPreReviewValidation(tid);
             break;
           case "APPROVED": {
             state.reviewTaskIds = state.reviewTaskIds.filter(
@@ -253,6 +245,68 @@ export function handleInboxMessage(filePath: string) {
   }
 
   inboxCursors.set(cursorKey, messages.length);
+}
+
+// --- Pre-review validation gate ---
+
+function triggerPreReviewValidation(taskId: string) {
+  runVerification(process.cwd()).then((result) => {
+    state.preValidatingTaskIds = state.preValidatingTaskIds.filter((id) => id !== taskId);
+    const passed = result.passed || result.results.length === 0;
+    const output = result.results.map((r) => `${r.name}: ${r.passed ? "pass" : "FAIL"}`).join(", ");
+    broadcast({ type: "pre_validation", taskId, passed, output });
+
+    if (passed) {
+      // Verification passed — promote to review queue for manager
+      state.reviewTaskIds.push(taskId);
+      const sysMsg: Message = {
+        id: `sys-preval-${Date.now()}`, timestamp: Date.now(), from: "system", to: "all",
+        content: result.results.length === 0
+          ? `Task #${taskId} ready for review (no verification commands configured)`
+          : `Task #${taskId} pre-review verification passed (${output}) — queued for manager review`,
+      };
+      state.messages.push(sysMsg);
+      broadcast({ type: "message_sent", message: sysMsg });
+
+      // Checkpoint gate: pause sprint for human review before manager acts
+      if (state.checkpoints.includes(taskId)) {
+        state.checkpoints = state.checkpoints.filter((id) => id !== taskId);
+        const taskSubject =
+          state.tasks.find((t) => t.id === taskId)?.subject ?? `Task #${taskId}`;
+        state.pendingCheckpoint = { taskId, taskSubject };
+        broadcast({ type: "checkpoint", checkpoint: state.pendingCheckpoint });
+        notifyWebhook("checkpoint_hit", { taskId, subject: taskSubject });
+      }
+    } else {
+      // Verification failed — bounce back to engineer without manager involvement
+      const task = state.tasks.find((t) => t.id === taskId);
+      const sysMsg: Message = {
+        id: `sys-preval-${Date.now()}`, timestamp: Date.now(), from: "system", to: "all",
+        content: `Task #${taskId} pre-review verification FAILED (${output}). Returned to engineer — fix and resubmit READY_FOR_REVIEW.`,
+      };
+      state.messages.push(sysMsg);
+      broadcast({ type: "message_sent", message: sysMsg });
+
+      // Emit failure details so engineer can see what broke
+      const details = result.results
+        .filter((r) => !r.passed)
+        .map((r) => `### ${r.name}\n\`\`\`\n${r.output.slice(-1500)}\n\`\`\``)
+        .join("\n\n");
+      if (details) {
+        const detailMsg: Message = {
+          id: `sys-preval-detail-${Date.now()}`, timestamp: Date.now(), from: "system",
+          to: task?.owner || "all",
+          content: `Pre-review verification output for task #${taskId}:\n\n${details}`,
+        };
+        state.messages.push(detailMsg);
+        broadcast({ type: "message_sent", message: detailMsg });
+      }
+    }
+  }).catch(() => {
+    // Fail-open on infra errors — let manager review
+    state.preValidatingTaskIds = state.preValidatingTaskIds.filter((id) => id !== taskId);
+    state.reviewTaskIds.push(taskId);
+  });
 }
 
 // --- Validation gate ---

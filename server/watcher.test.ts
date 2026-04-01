@@ -31,6 +31,7 @@ vi.mock("./state.js", () => {
     cycle: 0,
     phase: "idle" as string,
     reviewTaskIds: [] as string[],
+    preValidatingTaskIds: [] as string[],
     validatingTaskIds: [] as string[],
     tokenUsage: { total: 0, byAgent: {} as Record<string, number>, estimatedCostUsd: 0 },
     checkpoints: [] as string[],
@@ -71,6 +72,7 @@ import {
 import { state, inboxCursors, taskProtocolOverrides, broadcast, safeReadJSON, setTeamInitMessageSent } from "./state.js";
 import { saveMemory } from "./memory.js";
 import { accumulateTokenUsage } from "./token-tracker.js";
+import { runVerification } from "./verification.js";
 
 function resetState() {
   state.teamName = null;
@@ -84,6 +86,7 @@ function resetState() {
   state.cycle = 0;
   state.phase = "idle";
   state.reviewTaskIds = [];
+  state.preValidatingTaskIds = [];
   state.validatingTaskIds = [];
   state.tokenUsage = { total: 0, byAgent: {}, estimatedCostUsd: 0 };
   state.checkpoints = [];
@@ -445,25 +448,36 @@ describe("handleInboxMessage", () => {
     expect(taskProtocolOverrides.get("1")?.status).toBe("in_progress");
   });
 
-  it("READY_FOR_REVIEW — triggers checkpoint when task id is in checkpoints", () => {
+  it("READY_FOR_REVIEW — triggers checkpoint when task id is in checkpoints", async () => {
     state.tasks = [{ id: "2", subject: "Gated task", status: "in_progress", owner: "sprint-engineer-1", blockedBy: [] }];
     state.checkpoints = ["2"];
     vi.mocked(safeReadJSON).mockReturnValue([
       { from: "sprint-engineer-1", content: "READY_FOR_REVIEW: #2 — done" },
     ]);
     handleInboxMessage(inboxPath);
+    // Wait for async pre-review validation to complete
+    await vi.waitFor(() => {
+      expect(state.preValidatingTaskIds).not.toContain("2");
+    });
     expect(state.pendingCheckpoint).toMatchObject({ taskId: "2", taskSubject: "Gated task" });
     expect(state.checkpoints).not.toContain("2");
     expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({ type: "checkpoint" }));
   });
 
-  it("READY_FOR_REVIEW — adds task to reviewTaskIds", () => {
+  it("READY_FOR_REVIEW — adds task to reviewTaskIds after pre-validation passes", async () => {
     state.tasks = [{ id: "3", subject: "Review me", status: "in_progress", owner: "sprint-engineer-1", blockedBy: [] }];
     vi.mocked(safeReadJSON).mockReturnValue([
       { from: "sprint-engineer-1", content: "READY_FOR_REVIEW: #3 — done" },
     ]);
     handleInboxMessage("/home/user/.claude/teams/sprint-abc/inboxes/sprint-manager.json");
+    // Initially in preValidatingTaskIds
+    expect(state.preValidatingTaskIds).toContain("3");
+    // Wait for async pre-review validation to complete
+    await vi.waitFor(() => {
+      expect(state.preValidatingTaskIds).not.toContain("3");
+    });
     expect(state.reviewTaskIds).toContain("3");
+    expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({ type: "pre_validation" }));
   });
 
   it("APPROVED — starts validation gate (task stays in_progress, added to validatingTaskIds)", () => {
@@ -529,6 +543,39 @@ describe("handleInboxMessage", () => {
     expect(state.reviewTaskIds.filter((id: string) => id === "3")).toHaveLength(1);
     // No checkpoint or other side effects
     expect(state.pendingCheckpoint).toBeNull();
+  });
+
+  it("READY_FOR_REVIEW — deduplicates when task already in preValidatingTaskIds", () => {
+    state.tasks = [{ id: "3", subject: "Review me", status: "in_progress", owner: "sprint-engineer-1", blockedBy: [] }];
+    state.preValidatingTaskIds = ["3"]; // already pre-validating
+    vi.mocked(safeReadJSON).mockReturnValue([
+      { from: "sprint-engineer-1", content: "READY_FOR_REVIEW: #3 — done again" },
+    ]);
+    handleInboxMessage("/home/user/.claude/teams/sprint-abc/inboxes/sprint-manager.json");
+    expect(state.messages).toHaveLength(1);
+    expect(state.preValidatingTaskIds.filter((id: string) => id === "3")).toHaveLength(1);
+  });
+
+  it("READY_FOR_REVIEW — bounces task back when pre-validation fails", async () => {
+    vi.mocked(runVerification).mockResolvedValueOnce({
+      passed: false,
+      results: [{ name: "test", command: "npm test", passed: false, output: "FAIL: 2 tests failed" }],
+    });
+    state.tasks = [{ id: "11", subject: "Broken code", status: "in_progress", owner: "sprint-engineer-1", blockedBy: [] }];
+    vi.mocked(safeReadJSON).mockReturnValue([
+      { from: "sprint-engineer-1", content: "READY_FOR_REVIEW: #11 — done" },
+    ]);
+    handleInboxMessage("/home/user/.claude/teams/sprint-abc/inboxes/sprint-manager.json");
+    expect(state.preValidatingTaskIds).toContain("11");
+    await vi.waitFor(() => {
+      expect(state.preValidatingTaskIds).not.toContain("11");
+    });
+    // Should NOT be promoted to reviewTaskIds
+    expect(state.reviewTaskIds).not.toContain("11");
+    // System message about failure should be broadcast
+    expect(broadcast).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "pre_validation", taskId: "11", passed: false }),
+    );
   });
 
   it("APPROVED — completes task after successful validation", async () => {

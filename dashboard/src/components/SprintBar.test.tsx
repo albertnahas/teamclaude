@@ -20,6 +20,7 @@ function makeState(overrides: Partial<SprintState> = {}): SprintState {
     cycle: 0,
     phase: "idle",
     reviewTaskIds: [],
+    preValidatingTaskIds: [],
     validatingTaskIds: [],
     tokenUsage: { total: 0, byAgent: {}, estimatedCostUsd: 0 },
     checkpoints: [],

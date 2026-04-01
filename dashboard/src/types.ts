@@ -73,6 +73,7 @@ export interface SprintState {
   cycle: number;
   phase: "idle" | "analyzing" | "sprinting" | "validating";
   reviewTaskIds: string[];
+  preValidatingTaskIds: string[];
   validatingTaskIds: string[];
   tokenUsage: {
     total: number;
@@ -115,6 +116,7 @@ export type WsEvent =
   | { type: "process_exited"; code: number | null }
   | { type: "terminal_output"; agentName: string; paneIndex: number; content: string }
   | { type: "panes_discovered"; panes: { agentName: string | null; paneIndex: number }[] }
+  | { type: "pre_validation"; taskId: string; passed: boolean; output: string }
   | { type: "task_validation"; taskId: string; passed: boolean; output: string }
   | { type: "webhook_status"; status: SprintState["webhookStatus"] }
   | { type: "token_budget_approaching"; usage: SprintState["tokenUsage"] }

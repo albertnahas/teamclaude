@@ -38,9 +38,10 @@ describe("compileSprintPrompt", () => {
       expect(prompt).toContain("Distribute tasks evenly");
     });
 
-    it("includes mandatory review protocol for manager", () => {
+    it("includes review protocol and pre-review gate for manager", () => {
       const prompt = compileSprintPrompt("Build features", 2, true, 1);
-      expect(prompt).toContain("Mandatory Review Protocol");
+      expect(prompt).toContain("Review Protocol");
+      expect(prompt).toContain("Automated Pre-Review Gate");
       expect(prompt).toContain("REQUEST_CHANGES");
     });
 
@@ -62,7 +63,7 @@ describe("compileSprintPrompt", () => {
 
     it("manager protocol includes server-side validation warning", () => {
       const prompt = compileSprintPrompt("Build features", 2, true, 1);
-      expect(prompt).toContain("server runs automated verification after every APPROVED");
+      expect(prompt).toContain("server also runs verification after APPROVED as a safety net");
       expect(prompt).toContain("reverted to in_progress");
     });
 

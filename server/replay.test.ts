@@ -18,7 +18,7 @@ const tmpDir = mkdtempSync(join(tmpdir(), "tc-replay-test-"));
 
 function makeEvent(type: WsEvent["type"], extra: object = {}): WsEvent {
   if (type === "init") {
-    return { type: "init", state: { teamName: "t", projectName: "p", agents: [], tasks: [], messages: [], paused: false, escalation: null, mergeConflict: null, mode: "manual", cycle: 1, phase: "idle", reviewTaskIds: [], validatingTaskIds: [], tokenUsage: { total: 0, byAgent: {}, estimatedCostUsd: 0 }, checkpoints: [], pendingCheckpoint: null, tmuxAvailable: false, tmuxSessionName: null, ...extra } };
+    return { type: "init", state: { teamName: "t", projectName: "p", agents: [], tasks: [], messages: [], paused: false, escalation: null, mergeConflict: null, mode: "manual", cycle: 1, phase: "idle", reviewTaskIds: [], preValidatingTaskIds: [], validatingTaskIds: [], tokenUsage: { total: 0, byAgent: {}, estimatedCostUsd: 0 }, checkpoints: [], pendingCheckpoint: null, tmuxAvailable: false, tmuxSessionName: null, ...extra } };
   }
   if (type === "paused") return { type: "paused", paused: false, ...extra } as WsEvent;
   return { type: "process_started", pid: 0, ...extra } as WsEvent;
