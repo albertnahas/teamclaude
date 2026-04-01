@@ -316,7 +316,7 @@ export function TasksPanel({ tasks, reviewTaskIds, preValidatingTaskIds, validat
         </div>
       )}
 
-      <div style={{ flex: 1, overflow: "hidden" }}>
+      <div style={{ flex: 1, minHeight: 0 }}>
         {view === "list" ? (
           <div className="tasks-list">
             {visible.length === 0 ? (

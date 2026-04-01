@@ -64,7 +64,14 @@ function handleLaunch(req: IncomingMessage, res: ServerResponse) {
 
       const roleLearnings = getRoleLearnings(5);
       const customRoles = loadCustomRoles(process.cwd()) ?? undefined;
-      const prompt = compileSprintPrompt(roadmap || "", engineers, includePM, cycles, roleLearnings, customRoles);
+      const autoEngineers = engineers === 0 && !customRoles?.length;
+      let executionPlan = undefined;
+      if (autoEngineers && state.tasks.length > 0) {
+        const inferred = inferDependencies(state.tasks);
+        const tasksWithDeps = applyInferredDependencies(state.tasks, inferred);
+        executionPlan = buildExecutionPlan(tasksWithDeps);
+      }
+      const prompt = compileSprintPrompt(roadmap || "", engineers, includePM, cycles, roleLearnings, customRoles, process.cwd(), executionPlan);
       const startedAt = Date.now();
 
       // Generate sprint ID once on launch so recording and history use the same ID

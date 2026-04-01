@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { RoleLearnings } from "./learnings.js";
 import { formatMemoriesForPrompt } from "./memory.js";
+import type { ExecutionPlan } from "./planner.js";
 
 // --- Custom role support ---
 
@@ -110,6 +111,11 @@ IMPORTANT:
 - Always verify your work before submitting for review`;
 }
 
+function buildEngineerCountGuidance(plan: ExecutionPlan): string {
+  const maxParallel = Math.max(...plan.batches.map((b) => b.length), 1);
+  return `Task analysis shows up to ${maxParallel} tasks can run in parallel. Spawn ${maxParallel} engineer${maxParallel === 1 ? "" : "s"}.`;
+}
+
 // --- Public API ---
 
 export function compileSprintPrompt(
@@ -119,7 +125,8 @@ export function compileSprintPrompt(
   cycles: number,
   learnings?: RoleLearnings,
   roles?: string[],
-  projectRoot: string = process.cwd()
+  projectRoot: string = process.cwd(),
+  executionPlan?: ExecutionPlan
 ): string {
   const teamName = `sprint-${Date.now()}`;
   const autoEngineers = engineers === 0 && !roles?.length;
@@ -205,11 +212,14 @@ Your workflow:
 1. Wait for the PM's "ROADMAP_READY" message
 2. Call TaskList to see all created tasks
 3. For each task: call TaskUpdate to set owner to an agent name, then send "TASK_ASSIGNED: #id — subject" to that agent
-4. When an agent sends "READY_FOR_REVIEW: #id", begin reviewing RIGHT AWAY — the engineer is idle and blocked until you respond.
+4. When an agent sends "READY_FOR_REVIEW: #id": FIRST call TaskList and immediately assign the next unblocked, unassigned task to that engineer (if one exists) — send "TASK_ASSIGNED: #next-id — subject" so they keep working. THEN begin reviewing the submitted task.
 5. Send "APPROVED: #id" or "REQUEST_CHANGES: #id — specific feedback" back
-6. After APPROVED: immediately assign the next task in the SAME response — do not wait for acknowledgment. The server marks tasks completed automatically.
-7. When ALL tasks have status completed, send "SPRINT_COMPLETE" to team-lead
+6. When ALL tasks have status completed, send "SPRINT_COMPLETE" to team-lead
 ${distributionRule}
+
+## Stacked Assignment
+
+When an engineer submits READY_FOR_REVIEW, assign their next task immediately before reviewing. This keeps engineers productive while verification and review happen in parallel. If no unassigned tasks remain, skip the pre-assignment step.
 
 ## Automated Pre-Review Gate
 
@@ -237,11 +247,14 @@ ${agentListStr}${mgrLearnings}${mgrMemories}
 Your workflow:
 1. Call TaskList to see all created tasks
 2. For each task: call TaskUpdate to set owner to an agent name, then send "TASK_ASSIGNED: #id — subject" to that agent
-3. When an agent sends "READY_FOR_REVIEW: #id", begin reviewing RIGHT AWAY — the engineer is idle and blocked until you respond.
+3. When an agent sends "READY_FOR_REVIEW: #id": FIRST call TaskList and immediately assign the next unblocked, unassigned task to that engineer (if one exists) — send "TASK_ASSIGNED: #next-id — subject" so they keep working. THEN begin reviewing the submitted task.
 4. Send "APPROVED: #id" or "REQUEST_CHANGES: #id — specific feedback" back
-5. After APPROVED: immediately assign the next task in the SAME response — do not wait for acknowledgment. The server marks tasks completed automatically.
-6. When ALL tasks have status completed, send "SPRINT_COMPLETE" to team-lead
+5. When ALL tasks have status completed, send "SPRINT_COMPLETE" to team-lead
 ${distributionRule}
+
+## Stacked Assignment
+
+When an engineer submits READY_FOR_REVIEW, assign their next task immediately before reviewing. This keeps engineers productive while verification and review happen in parallel. If no unassigned tasks remain, skip the pre-assignment step.
 
 ## Automated Pre-Review Gate
 
@@ -273,8 +286,11 @@ Your workflow:
 4. Run the pre-submit checklist below
 5. Clean up: remove any dead code, unused imports, or temporary scaffolding you created
 6. Send "READY_FOR_REVIEW: #id — summary of changes" to sprint-manager
-7. STOP — your turn is done. The server runs automated verification (type-check, lint, tests). If it fails, you will receive a system message with the failure output — fix the issues and resubmit READY_FOR_REVIEW. If it passes, the task goes to the manager for code review.
-8. When you receive APPROVED — task is done. Do NOT send any reply. Wait for the next TASK_ASSIGNED.
+7. After sending READY_FOR_REVIEW: the server runs automated verification (type-check, lint, tests). If it fails, you will receive a system message with the failure output — fix the issues and resubmit READY_FOR_REVIEW. If verification passes, the task goes to the manager for review.
+   - You may receive a new TASK_ASSIGNED immediately while your previous task is still under review — this is normal. Start working on the new task right away. The previous task review continues in parallel.
+   - Do NOT re-send READY_FOR_REVIEW for the task already submitted.
+   - If REQUEST_CHANGES arrives for a previous task while you are working on a new one: finish your current work first (or reach a clean stopping point), then address the requested changes and resubmit.
+8. When you receive APPROVED — task is done. Do NOT send any reply.
 
 ## Pre-submit checklist (run ALL before READY_FOR_REVIEW)
 - [ ] Type-check passes clean
@@ -289,7 +305,7 @@ Your workflow:
 IMPORTANT:
 - Do NOT call TaskUpdate to set status to "completed" yourself. The system marks tasks completed when the manager approves.
 - Prefer editing existing files over creating new ones. Reuse existing patterns and abstractions.
-- After sending READY_FOR_REVIEW, STOP. Do not re-send. Wait for the manager.
+- After sending READY_FOR_REVIEW, do not re-send it. You may receive a new TASK_ASSIGNED before APPROVED — start on it immediately.
 - When you receive APPROVED, do NOT send any response. Simply wait for the next TASK_ASSIGNED.`;
 
   if (includePM) {
@@ -309,9 +325,12 @@ ${mgrPromptAuto}
 """
 `;
     if (autoEngineers) {
+      const engineerGuidance = executionPlan
+        ? buildEngineerCountGuidance(executionPlan)
+        : "The manager determines how many engineers to spawn based on task complexity.";
       prompt += `
 ### Engineers
-The manager determines how many engineers to spawn based on task complexity. For each engineer, spawn with subagent_type: sprint-engineer, named sprint-engineer-1, sprint-engineer-2, etc.
+${engineerGuidance} For each engineer, spawn with subagent_type: sprint-engineer, named sprint-engineer-1, sprint-engineer-2, etc.
 Engineer prompt template:
 """
 ${engPrompt("sprint-engineer-N")}
@@ -356,9 +375,12 @@ ${mgrPromptManual}
 """
 `;
     if (autoEngineers) {
+      const engineerGuidance = executionPlan
+        ? buildEngineerCountGuidance(executionPlan)
+        : "The manager determines how many engineers to spawn.";
       prompt += `
 ### Engineers
-The manager determines how many engineers to spawn. Name them sprint-engineer-1, sprint-engineer-2, etc. subagent_type: sprint-engineer.
+${engineerGuidance} Name them sprint-engineer-1, sprint-engineer-2, etc. subagent_type: sprint-engineer.
 Engineer prompt template:
 """
 ${engPrompt("sprint-engineer-N")}

@@ -67,10 +67,10 @@ describe("compileSprintPrompt", () => {
       expect(prompt).toContain("reverted to in_progress");
     });
 
-    it("manager prompt tells to respond immediately to reviews", () => {
+    it("manager prompt instructs stacked assignment on READY_FOR_REVIEW", () => {
       const prompt = compileSprintPrompt("Build features", 2, true, 1);
-      expect(prompt).toContain("begin reviewing RIGHT AWAY");
-      expect(prompt).toContain("engineer is idle and blocked");
+      expect(prompt).toContain("FIRST call TaskList and immediately assign the next unblocked, unassigned task");
+      expect(prompt).toContain("Stacked Assignment");
     });
   });
 
@@ -144,10 +144,16 @@ describe("compileSprintPrompt", () => {
       expect(prompt).toContain("Never duplicate data that exists elsewhere");
     });
 
-    it("tells engineers to STOP after READY_FOR_REVIEW", () => {
+    it("tells engineers not to re-send READY_FOR_REVIEW and explains stacked assignment", () => {
       const prompt = compileSprintPrompt("Build it", 1, false, 1);
-      expect(prompt).toContain("STOP — your turn is done");
-      expect(prompt).toContain("Do not re-send");
+      expect(prompt).toContain("do not re-send it");
+      expect(prompt).toContain("You may receive a new TASK_ASSIGNED before APPROVED");
+    });
+
+    it("tells engineers to finish current task before addressing REQUEST_CHANGES from a prior task", () => {
+      const prompt = compileSprintPrompt("Build it", 1, false, 1);
+      expect(prompt).toContain("If REQUEST_CHANGES arrives for a previous task while you are working on a new one");
+      expect(prompt).toContain("finish your current work first");
     });
   });
 
@@ -157,6 +163,26 @@ describe("compileSprintPrompt", () => {
       expect(prompt).toContain("manager determines");
       expect(prompt).toContain("sprint-engineer-N");
       expect(prompt).not.toContain('"sprint-engineer-1"');
+    });
+
+    it("injects concrete parallelism guidance when executionPlan has multiple parallel tasks", () => {
+      const plan = { batches: [["1", "2"], ["3"]], criticalPath: ["1", "3"], timeline: "" };
+      const prompt = compileSprintPrompt("Analyze and build", 0, true, 1, undefined, undefined, process.cwd(), plan);
+      expect(prompt).toContain("Spawn 2 engineers");
+      expect(prompt).toContain("up to 2 tasks can run in parallel");
+    });
+
+    it("uses singular 'engineer' when max parallelism is 1", () => {
+      const plan = { batches: [["1"], ["2"]], criticalPath: ["1", "2"], timeline: "" };
+      const prompt = compileSprintPrompt("Analyze and build", 0, true, 1, undefined, undefined, process.cwd(), plan);
+      expect(prompt).toContain("Spawn 1 engineer");
+      expect(prompt).not.toContain("Spawn 1 engineers");
+    });
+
+    it("falls back to generic guidance when no executionPlan provided", () => {
+      const prompt = compileSprintPrompt("Analyze and build", 0, true, 1);
+      expect(prompt).toContain("manager determines how many engineers to spawn based on task complexity");
+      expect(prompt).not.toContain("tasks can run in parallel");
     });
   });
 
