@@ -76,6 +76,10 @@ export interface SprintState {
     lastError?: string;
     deliveryCount: number;
   };
+  /** Persisted protocol overrides (taskId → {status, owner}) */
+  taskProtocolOverridesJSON?: Record<string, { status: TaskInfo["status"]; owner: string }>;
+  /** Persisted inbox cursors (filePath → cursor position) */
+  inboxCursorsJSON?: Record<string, number>;
 }
 
 export type WsEvent =
@@ -232,4 +236,6 @@ export function resetState() {
   setTeamInitMessageSent(false);
   taskProtocolOverrides.clear();
   inboxCursors.clear();
+  state.taskProtocolOverridesJSON = undefined;
+  state.inboxCursorsJSON = undefined;
 }
