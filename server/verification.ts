@@ -1,9 +1,44 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const execFileAsync = promisify(execFile);
+/**
+ * Run a verification subprocess with stdin closed so interactive prompts
+ * (e.g. `next lint` asking for ESLint setup) fail fast instead of blocking
+ * until timeout and silently reverting APPROVED tasks.
+ */
+function runCommand(
+  cmd: string,
+  args: string[],
+  cwd: string,
+  timeoutMs: number,
+): Promise<{ passed: boolean; output: string }> {
+  return new Promise((resolve) => {
+    let stdout = "";
+    let stderr = "";
+    const child = spawn(cmd, args, {
+      cwd,
+      env: { ...process.env, CI: "true", FORCE_COLOR: "0" },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+    }, timeoutMs);
+    child.stdout?.on("data", (c) => { stdout += c.toString(); });
+    child.stderr?.on("data", (c) => { stderr += c.toString(); });
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      resolve({ passed: false, output: err.message });
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve({
+        passed: code === 0,
+        output: (stdout + stderr).slice(-2000),
+      });
+    });
+  });
+}
 
 export interface VerificationCommands {
   typeCheck?: string;
@@ -66,7 +101,10 @@ function autoDetectCommands(cwd: string): VerificationCommands {
       if (scripts["test:run"]) commands.test = `${runner} run test:run`;
       else if (scripts["test"]) commands.test = `${runner} test`;
 
-      if (scripts["lint"]) commands.lint = `${runner} run lint`;
+      // Lint is intentionally NOT auto-detected for Node.js: `next lint` is
+      // deprecated and prompts interactively for ESLint setup, which hangs
+      // the verification subprocess and reverts every APPROVED task back to
+      // in_progress. Users who want lint as a gate must opt in via .sprint.yml.
     } catch {}
     return commands;
   }
@@ -130,17 +168,8 @@ export async function runVerification(cwd: string): Promise<VerificationResult> 
 
   for (const [name, command] of entries) {
     const [cmd, ...args] = command.split(/\s+/);
-    try {
-      const { stdout, stderr } = await execFileAsync(cmd, args, {
-        cwd,
-        timeout: 120_000,
-        env: { ...process.env, CI: "true", FORCE_COLOR: "0" },
-      });
-      results.push({ name, command, passed: true, output: (stdout + stderr).slice(-2000) });
-    } catch (err: any) {
-      const output = ((err.stdout ?? "") + (err.stderr ?? "")).slice(-2000) || err.message;
-      results.push({ name, command, passed: false, output });
-    }
+    const { passed, output } = await runCommand(cmd, args, cwd, 120_000);
+    results.push({ name, command, passed, output });
   }
 
   return {

@@ -9,16 +9,8 @@ vi.mock("node:fs", async (importOriginal) => {
 });
 
 vi.mock("node:child_process", () => {
-  const execFile = vi.fn();
-  return { execFile };
-});
-
-vi.mock("node:util", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:util")>();
-  return {
-    ...actual,
-    promisify: vi.fn((fn: any) => fn),
-  };
+  const spawn = vi.fn();
+  return { spawn };
 });
 
 beforeEach(() => {
@@ -69,7 +61,21 @@ describe("loadVerificationCommands", () => {
     const cmds = loadVerificationCommands("/project");
     expect(cmds.typeCheck).toBe("npm run type-check");
     expect(cmds.test).toBe("npm test");
-    expect(cmds.lint).toBe("npm run lint");
+    // Lint is not auto-detected for Node.js — see verification.ts for why.
+    expect(cmds.lint).toBeUndefined();
+  });
+
+  it("auto-detects Node.js lint only via explicit .sprint.yml (not package.json)", () => {
+    vi.mocked(existsSync).mockImplementation((p) => {
+      const s = String(p);
+      return s.endsWith("package.json") || s.endsWith("package-lock.json");
+    });
+    vi.mocked(readFileSync).mockReturnValue(
+      JSON.stringify({ scripts: { lint: "eslint ." } })
+    );
+
+    const cmds = loadVerificationCommands("/project");
+    expect(cmds.lint).toBeUndefined();
   });
 
   it("auto-detects pnpm runner from pnpm-lock.yaml", () => {
@@ -160,3 +166,4 @@ describe("runVerification", () => {
     expect(result.results).toHaveLength(0);
   });
 });
+
