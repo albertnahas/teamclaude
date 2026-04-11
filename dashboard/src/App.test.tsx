@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, act } from "@testing-library/react";
-import type { WsEvent } from "./types";
+import type { WsEvent, AgentInfo, TaskInfo, Message } from "./types";
 
 // Mock useWebSocket so we control event delivery without a real WebSocket
 let capturedHandler: ((event: WsEvent) => void) | null = null;
@@ -37,9 +37,9 @@ function sendSprintInit(overrides: Partial<Parameters<typeof buildInitState>[0]>
 }
 
 function buildInitState(overrides: {
-  agents?: unknown[];
-  tasks?: unknown[];
-  messages?: unknown[];
+  agents?: AgentInfo[];
+  tasks?: TaskInfo[];
+  messages?: Message[];
 } = {}) {
   return {
     teamName: "test-team",
@@ -52,7 +52,7 @@ function buildInitState(overrides: {
     mergeConflict: null,
     mode: "autonomous" as const,
     cycle: 1,
-    phase: "sprint" as const,
+    phase: "sprinting" as const,
     reviewTaskIds: [],
     preValidatingTaskIds: [],
     validatingTaskIds: [],
@@ -79,7 +79,7 @@ describe("isLaunching overlay", () => {
 
   it("hides launching overlay once agents appear", () => {
     render(<App />);
-    sendSprintInit({ agents: [{ name: "sprint-engineer", status: "working", model: "sonnet", tokensUsed: 0, lastSeen: Date.now() }] });
+    sendSprintInit({ agents: [{ name: "sprint-engineer", agentId: "a1", agentType: "sprint-engineer", status: "active" }] });
 
     expect(document.querySelector(".launching-overlay")).toBeNull();
     expect(screen.queryByText("Initializing sprint...")).toBeNull();
@@ -87,7 +87,7 @@ describe("isLaunching overlay", () => {
 
   it("hides launching overlay once tasks appear", () => {
     render(<App />);
-    sendSprintInit({ tasks: [{ id: "1", subject: "Do something", status: "pending", owner: null, blockedBy: [], blocks: [] }] });
+    sendSprintInit({ tasks: [{ id: "1", subject: "Do something", status: "pending", owner: "", blockedBy: [] }] });
 
     expect(document.querySelector(".launching-overlay")).toBeNull();
     expect(screen.queryByText("Initializing sprint...")).toBeNull();
@@ -111,7 +111,7 @@ describe("isLaunching overlay", () => {
 
   it("container is visible once overlay is dismissed", () => {
     render(<App />);
-    sendSprintInit({ agents: [{ name: "sprint-engineer", status: "working", model: "sonnet", tokensUsed: 0, lastSeen: Date.now() }] });
+    sendSprintInit({ agents: [{ name: "sprint-engineer", agentId: "a1", agentType: "sprint-engineer", status: "active" }] });
 
     const container = document.querySelector<HTMLElement>(".container");
     expect(container?.style.visibility).toBe("visible");
