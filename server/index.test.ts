@@ -291,6 +291,8 @@ function resetStateFields() {
   (state as any).pendingCheckpoint = null;
   (state as any).tmuxAvailable = false;
   (state as any).tmuxSessionName = null;
+  (state as any).tokenBudgetApproaching = false;
+  (state as any).tokenBudgetExceeded = false;
   vi.mocked(broadcast).mockClear();
 }
 

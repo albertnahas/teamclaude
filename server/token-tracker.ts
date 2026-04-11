@@ -6,6 +6,8 @@ import { loadBudgetConfig, checkBudget, type BudgetConfig } from "./budget.js";
 
 // Cached budget config — set once at sprint start, cleared on reset
 let budgetConfigCache: BudgetConfig | null | undefined = undefined;
+// Cached pricing — resolved once at sprint start, cleared on reset
+let pricingCache: { input: number; output: number } | undefined = undefined;
 
 /**
  * Set the budget config cache.
@@ -15,6 +17,8 @@ let budgetConfigCache: BudgetConfig | null | undefined = undefined;
  */
 export function setBudgetConfigCache(config: BudgetConfig | null | undefined): void {
   budgetConfigCache = config;
+  // Also prime/clear pricing cache alongside budget
+  pricingCache = config !== undefined ? resolveModelPricing() : undefined;
 }
 
 // --- Pricing table ---
@@ -49,8 +53,7 @@ export function accumulateTokenUsage(
   inputTokens: number,
   outputTokens: number
 ): void {
-  // Resolve pricing per-call so sprint.yml changes take effect without restart
-  const { input: INPUT_COST_PER_MTOK, output: OUTPUT_COST_PER_MTOK } = resolveModelPricing();
+  const { input: INPUT_COST_PER_MTOK, output: OUTPUT_COST_PER_MTOK } = pricingCache ?? resolveModelPricing();
   const tokens = inputTokens + outputTokens;
   state.tokenUsage.total += tokens;
   state.tokenUsage.byAgent[agentName] =

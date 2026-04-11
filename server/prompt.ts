@@ -64,11 +64,6 @@ function learningsSection(label: string, content: string): string {
   return `\n\nProcess learnings from past sprints — ${label}:\n${content}`;
 }
 
-function hasAnyLearnings(learnings?: RoleLearnings): boolean {
-  if (!learnings) return false;
-  return !!(learnings.orchestrator || learnings.pm || learnings.manager || learnings.engineer);
-}
-
 const REFLECTION_INSTRUCTION = `
 Before sending SPRINT_COMPLETE, reflect on the sprint process. For each process improvement you identify, send:
   PROCESS_LEARNING: <role> — <actionable improvement>
@@ -145,10 +140,10 @@ IMPORTANT: You must do ALL work yourself. Do NOT spawn helper agents to create t
 First, call TeamCreate to create a team with team_name "${teamName}".
 `;
 
-  if (hasAnyLearnings(learnings) && learnings!.orchestrator) {
+  if (learnings?.orchestrator) {
     prompt += `
 ## Process Learnings
-${learnings!.orchestrator}
+${learnings.orchestrator}
 `;
   }
 
@@ -358,9 +353,9 @@ Engineers are named sprint-engineer-1, sprint-engineer-2, etc. Distribute tasks 
 
 ### Engineers
 Spawn N engineers (N = recommendedEngineers from Phase 2). For each, use subagent_type: sprint-engineer, named sprint-engineer-1, sprint-engineer-2, etc.
-Engineer prompt template:
+Engineer prompt template (replace <<REPLACE_N>> with actual name e.g. sprint-engineer-1):
 """
-${engPrompt("sprint-engineer-N")}
+${engPrompt("<<REPLACE_N>>")}
 """
 
 ## Phase 4: Monitor
@@ -392,9 +387,9 @@ ${mgrPromptAuto}
         prompt += `
 ### Engineers
 ${buildEngineerCountGuidance(executionPlan!)} For each engineer, spawn with subagent_type: sprint-engineer, named sprint-engineer-1, sprint-engineer-2, etc.
-Engineer prompt template:
+Engineer prompt template (replace <<REPLACE_N>> with actual name e.g. sprint-engineer-1):
 """
-${engPrompt("sprint-engineer-N")}
+${engPrompt("<<REPLACE_N>>")}
 """`;
       } else {
         for (const { name, role } of agentNames) {
@@ -456,9 +451,9 @@ ${mgrPromptManual}
       prompt += `
 ### Engineers
 ${engineerGuidance} Name them sprint-engineer-1, sprint-engineer-2, etc. subagent_type: sprint-engineer.
-Engineer prompt template:
+Engineer prompt template (replace <<REPLACE_N>> with actual name e.g. sprint-engineer-1):
 """
-${engPrompt("sprint-engineer-N")}
+${engPrompt("<<REPLACE_N>>")}
 """`;
     } else {
       for (const { name, role } of agentNames) {

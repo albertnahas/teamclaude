@@ -1,5 +1,5 @@
 import { readFile, readFileSync, existsSync, readdirSync } from "node:fs";
-import { join, dirname as pathDirname } from "node:path";
+import { join, dirname as pathDirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
@@ -27,6 +27,12 @@ import { setBudgetConfigCache } from "./token-tracker.js";
 import { loadBudgetConfig } from "./budget.js";
 import { CORS } from "./http-utils.js";
 import { resetSprintCompleteFlag } from "./sprint-guard.js";
+
+const SPRINT_ID_RE = /^sprint-[\w-]+$/;
+
+function isSafeSprintId(id: string): boolean {
+  return SPRINT_ID_RE.test(id) && resolve(historyDir(), id).startsWith(resolve(historyDir()));
+}
 
 let _serverPort = 3456;
 export function setServerPort(p: number) { _serverPort = p; }
@@ -220,6 +226,9 @@ export function handleRequest(req: IncomingMessage, res: ServerResponse) {
     if (!idA || !idB) {
       res.writeHead(400, { "Content-Type": "application/json", ...CORS });
       res.end(JSON.stringify({ error: "Query params 'a' and 'b' are required" }));
+    } else if (!isSafeSprintId(idA) || !isSafeSprintId(idB)) {
+      res.writeHead(400, { "Content-Type": "application/json", ...CORS });
+      res.end(JSON.stringify({ error: "Invalid sprint ID" }));
     } else {
       diffRetros(idA, idB).then((diff) => {
         if (!diff) {
@@ -256,7 +265,7 @@ export function handleRequest(req: IncomingMessage, res: ServerResponse) {
       if (!retroContent && body) {
         try {
           const { sprintId } = JSON.parse(body) as { sprintId?: string };
-          if (sprintId) {
+          if (sprintId && isSafeSprintId(sprintId)) {
             const { readFile: readFileAsync } = await import("node:fs/promises");
             retroContent = await readFileAsync(join(historyDir(), sprintId, "retro.md"), "utf-8").catch(() => null);
           }
@@ -426,6 +435,11 @@ export function handleRequest(req: IncomingMessage, res: ServerResponse) {
     const parsedUrl = new URL(url, "http://localhost");
     const pathParts = parsedUrl.pathname.slice("/api/history/".length);
     const id = pathParts.slice(0, pathParts.lastIndexOf("/retro"));
+    if (!isSafeSprintId(id)) {
+      res.writeHead(400, { "Content-Type": "application/json", ...CORS });
+      res.end(JSON.stringify({ error: "Invalid sprint ID" }));
+      return;
+    }
     const retroPath = join(historyDir(), id, "retro.md");
     if (existsSync(retroPath)) {
       const retroContent = readFileSync(retroPath, "utf-8");

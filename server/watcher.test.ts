@@ -16,6 +16,14 @@ vi.mock("./github.js", () => ({
   loadGitHubConfig: vi.fn(() => null),
   createIssuesForSprint: vi.fn(() => Promise.resolve()),
 }));
+vi.mock("./sprint-guard.js", () => {
+  let _complete = false;
+  return {
+    isSprintComplete: vi.fn(() => _complete),
+    setSprintComplete: vi.fn(() => { _complete = true; }),
+    resetSprintCompleteFlag: vi.fn(() => { _complete = false; }),
+  };
+});
 
 // Mock state module — must be before importing watcher
 vi.mock("./state.js", () => {
@@ -27,6 +35,7 @@ vi.mock("./state.js", () => {
     messages: [] as any[],
     paused: false,
     escalation: null as any,
+    mergeConflict: null as any,
     mode: "manual" as "manual" | "autonomous",
     cycle: 0,
     phase: "idle" as string,
@@ -83,6 +92,7 @@ function resetState() {
   state.messages = [];
   state.paused = false;
   state.escalation = null;
+  state.mergeConflict = null;
   state.mode = "manual";
   state.cycle = 0;
   state.phase = "idle";

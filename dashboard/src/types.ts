@@ -34,8 +34,6 @@ export interface TaskInfo {
   owner: string;
   blockedBy: string[];
   description?: string;
-  model?: string;
-  estimatedCostUsd?: number;
 }
 
 export interface Message {

@@ -233,8 +233,6 @@ function sprintReducer(state: SprintState, event: WsEvent): SprintState {
       return { ...state, tokenBudgetApproaching: true, tokenUsage: event.usage };
     case "token_budget_exceeded":
       return { ...state, tokenBudgetApproaching: true, tokenBudgetExceeded: true, paused: true, tokenUsage: event.usage };
-    case "plan_approved":
-      return { ...state, phase: "sprinting" };
     case "pre_validation":
       return { ...state, preValidatingTaskIds: state.preValidatingTaskIds.filter((id) => id !== event.taskId) };
     case "task_validation":
@@ -268,6 +266,10 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(300);
   const [msgHeight, setMsgHeight] = useState(280);
   const dragRef = useRef<{ type: "h" | "v"; startPos: number; startSize: number } | null>(null);
+  const teamNameRef = useRef(sprintState.teamName);
+  teamNameRef.current = sprintState.teamName;
+  const [launchTimedOut, setLaunchTimedOut] = useState(false);
+  const launchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
@@ -313,7 +315,7 @@ export default function App() {
       if (!event.state.tokenBudgetApproaching && !event.state.tokenBudgetExceeded) setBudgetWarningDismissed(false);
     }
     // When server signals process exited and no team is active, return to setup
-    if (event.type === "process_exited" && !sprintState.teamName) {
+    if (event.type === "process_exited" && !teamNameRef.current) {
       setAppPhase("setup");
     }
     if (event.type === "token_budget_approaching" || event.type === "token_budget_exceeded") {
@@ -337,6 +339,23 @@ export default function App() {
   }, [appPhase]);
 
   useWebSocket(handleWsEvent);
+
+  const hasData = sprintState.agents.length > 0 || sprintState.tasks.length > 0 || sprintState.messages.length > 0;
+  const isLaunching = appPhase === "sprint" && !hasData && !launchTimedOut;
+
+  useEffect(() => {
+    if (isLaunching && !launchTimerRef.current) {
+      launchTimerRef.current = setTimeout(() => setLaunchTimedOut(true), 30_000);
+    }
+    if (!isLaunching && launchTimerRef.current) {
+      clearTimeout(launchTimerRef.current);
+      launchTimerRef.current = null;
+      setLaunchTimedOut(false);
+    }
+    return () => {
+      if (launchTimerRef.current) clearTimeout(launchTimerRef.current);
+    };
+  }, [isLaunching]);
 
   const [pendingLaunch, setPendingLaunch] = useState<{
     roadmap: string;
@@ -435,11 +454,6 @@ export default function App() {
     // Reconnect WebSocket to restart replay from server side
     window.location.reload();
   };
-
-  const isLaunching = appPhase === "sprint"
-    && sprintState.agents.length === 0
-    && sprintState.tasks.length === 0
-    && sprintState.messages.length === 0;
 
   return (
     <div id="sprint-phase">

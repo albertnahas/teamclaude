@@ -163,7 +163,7 @@ describe("compileSprintPrompt", () => {
       expect(prompt).toContain("Determine Team Size");
       expect(prompt).toContain("/api/plan");
       expect(prompt).toContain("recommendedEngineers");
-      expect(prompt).toContain("sprint-engineer-N");
+      expect(prompt).toContain("<<REPLACE_N>>");
       expect(prompt).not.toContain('"sprint-engineer-1"');
     });
 
