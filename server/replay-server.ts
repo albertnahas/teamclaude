@@ -9,7 +9,7 @@ import { join, resolve, dirname as pathDirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { loadRecording, startReplay } from "./replay.js";
-import { CORS } from "./http-utils.js";
+import { CORS_READONLY as CORS } from "./http-utils.js";
 
 const args = process.argv.slice(2);
 const fileArg = args.find((a) => !a.startsWith("--")) ?? "";

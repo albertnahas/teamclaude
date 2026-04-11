@@ -189,6 +189,12 @@ describe("compileSprintPrompt", () => {
       expect(prompt).not.toContain("tasks can run in parallel");
     });
 
+    it("uses custom port in plan API URL when port is overridden", () => {
+      const prompt = compileSprintPrompt("Analyze and build", 0, true, 1, undefined, undefined, process.cwd(), undefined, 4000);
+      expect(prompt).toContain("http://localhost:4000/api/plan");
+      expect(prompt).not.toContain("localhost:3456");
+    });
+
     it("manual mode uses plan API query when autoEngineers and no executionPlan", () => {
       const prompt = compileSprintPrompt("Build it", 0, false, 1);
       expect(prompt).toContain("Step 2: Determine team size");
