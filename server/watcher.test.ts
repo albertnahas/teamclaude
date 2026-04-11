@@ -68,6 +68,7 @@ import {
   handleTeamConfig,
   handleInboxMessage,
   handleTaskFile,
+  resetSprintCompleteFlag,
 } from "./watcher.js";
 import { state, inboxCursors, taskProtocolOverrides, broadcast, safeReadJSON, setTeamInitMessageSent } from "./state.js";
 import { saveMemory } from "./memory.js";
@@ -95,6 +96,7 @@ function resetState() {
   state.tmuxSessionName = null;
   inboxCursors.clear();
   taskProtocolOverrides.clear();
+  resetSprintCompleteFlag();
   vi.mocked(broadcast).mockClear();
   vi.mocked(safeReadJSON).mockClear();
   // Reset teamInitMessageSent so each test starts fresh
@@ -670,6 +672,50 @@ describe("handleInboxMessage", () => {
       const events = vi.mocked(broadcast).mock.calls.map((c) => c[0].type);
       expect(events).toContain("cycle_info");
       expect(events).toContain("message_sent");
+    });
+
+    it("ROADMAP_READY is ignored after SPRINT_COMPLETE to prevent PM race", () => {
+      // Simulate: manager sends SPRINT_COMPLETE, then PM sends ROADMAP_READY for next cycle
+      vi.mocked(safeReadJSON).mockReturnValue([
+        { from: "sprint-manager", content: "SPRINT_COMPLETE: all done" },
+      ]);
+      handleInboxMessage(inboxPath);
+      expect(state.phase).toBe("validating");
+
+      inboxCursors.clear();
+      vi.mocked(broadcast).mockClear();
+      vi.mocked(safeReadJSON).mockReturnValue([
+        { from: "sprint-pm", content: "ROADMAP_READY: cycle 2, 7 tasks" },
+      ]);
+      handleInboxMessage(inboxPath);
+      // Phase should NOT revert to "sprinting"
+      expect(state.phase).toBe("validating");
+      const events = vi.mocked(broadcast).mock.calls.map((c) => c[0].type);
+      expect(events).not.toContain("cycle_info");
+    });
+
+    it("NEXT_CYCLE after SPRINT_COMPLETE re-enables ROADMAP_READY", () => {
+      // SPRINT_COMPLETE blocks further ROADMAP_READY
+      vi.mocked(safeReadJSON).mockReturnValue([
+        { from: "sprint-manager", content: "SPRINT_COMPLETE: all done" },
+      ]);
+      handleInboxMessage(inboxPath);
+
+      // NEXT_CYCLE clears the guard
+      inboxCursors.clear();
+      vi.mocked(safeReadJSON).mockReturnValue([
+        { from: "sprint-pm", content: "NEXT_CYCLE: 2" },
+      ]);
+      handleInboxMessage(inboxPath);
+
+      // ROADMAP_READY should now work
+      inboxCursors.clear();
+      vi.mocked(safeReadJSON).mockReturnValue([
+        { from: "sprint-pm", content: "ROADMAP_READY: cycle 2" },
+      ]);
+      handleInboxMessage(inboxPath);
+      expect(state.phase).toBe("sprinting");
+      expect(state.cycle).toBe(2);
     });
 
     it("does not trigger phase change in manual mode", () => {

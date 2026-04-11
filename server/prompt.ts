@@ -116,6 +116,12 @@ function buildEngineerCountGuidance(plan: ExecutionPlan): string {
   return `Task analysis shows up to ${maxParallel} tasks can run in parallel. Spawn ${maxParallel} engineer${maxParallel === 1 ? "" : "s"}.`;
 }
 
+function planApiGuidance(port: number): string {
+  return `Run this command to determine how many engineers to spawn:
+  curl -s http://localhost:${port}/api/plan
+Parse the JSON response and read the "recommendedEngineers" value. If the command fails, default to 2.`;
+}
+
 // --- Public API ---
 
 export function compileSprintPrompt(
@@ -126,7 +132,8 @@ export function compileSprintPrompt(
   learnings?: RoleLearnings,
   roles?: string[],
   projectRoot: string = process.cwd(),
-  executionPlan?: ExecutionPlan
+  executionPlan?: ExecutionPlan,
+  port: number = 3456
 ): string {
   const teamName = `sprint-${Date.now()}`;
   const autoEngineers = engineers === 0 && !roles?.length;
@@ -309,7 +316,64 @@ IMPORTANT:
 - When you receive APPROVED, do NOT send any response. Simply wait for the next TASK_ASSIGNED.`;
 
   if (includePM) {
-    prompt += `
+    if (autoEngineers && !executionPlan) {
+      // Phased: spawn PM first to create tasks, then query plan API for team sizing
+      const pmPromptOneShot = `You are the PM for team "${teamName}".${roadmap.trim() ? `\n\nUser guidance:\n${roadmap}` : ""}${pmLearnings}${pmMemories}
+
+Your workflow:
+1. Analyze the codebase to understand existing patterns, architecture, and conventions
+2. For EACH task, call the TaskCreate tool with:
+   - A clear, specific subject (imperative form: "Add X", "Fix Y", "Refactor Z")
+   - A description that includes: what to do, where in the codebase, and acceptance criteria (how to verify it's done)
+3. Before creating tasks, check if existing code already partially solves the problem — avoid creating tasks for work that's already done
+4. After creating all tasks, respond with a brief summary of the tasks you created.
+
+CRITICAL: You MUST call TaskCreate for every task. The visualization dashboard reads from TaskCreate — messages alone will NOT appear on the board.
+IMPORTANT: Each task description MUST include acceptance criteria. Example: "Done when: tests pass, endpoint returns 200, no type errors."`;
+
+      prompt += `
+This is AUTONOMOUS mode with dynamic team sizing. Follow these phases IN ORDER.
+
+## Phase 1: Task Planning
+Spawn sprint-pm using the Agent tool (subagent_type: sprint-pm). Wait for it to complete before moving to Phase 2.
+
+### sprint-pm prompt:
+"""
+${pmPromptOneShot}
+"""
+
+## Phase 2: Determine Team Size
+${planApiGuidance(port)}
+
+## Phase 3: Sprint Execution
+Spawn these agents using the Agent tool:
+
+### sprint-manager (subagent_type: sprint-manager)
+Prompt:
+"""
+${mgrPromptManual}
+
+Engineers are named sprint-engineer-1, sprint-engineer-2, etc. Distribute tasks evenly across all engineers using round-robin. Do NOT assign all tasks to one agent.
+"""
+
+### Engineers
+Spawn N engineers (N = recommendedEngineers from Phase 2). For each, use subagent_type: sprint-engineer, named sprint-engineer-1, sprint-engineer-2, etc.
+Engineer prompt template:
+"""
+${engPrompt("sprint-engineer-N")}
+"""
+
+## Phase 4: Monitor
+Wait for the manager to send "SPRINT_COMPLETE". Then you are done.
+`;
+      if (cycles > 1) {
+        prompt += `
+
+## Sprint Cycles (${cycles} total)
+After each cycle, the manager sends "CYCLE_COMPLETE: cycle N". When you receive it, repeat Phases 1-3 for the next cycle. Run exactly ${cycles} cycles.`;
+      }
+    } else {
+      prompt += `
 This is AUTONOMOUS mode. Spawn these agents using the Task tool. Use the EXACT prompts below for each agent.
 
 ### sprint-pm (subagent_type: sprint-pm)
@@ -324,48 +388,59 @@ Prompt:
 ${mgrPromptAuto}
 """
 `;
-    if (autoEngineers) {
-      const engineerGuidance = executionPlan
-        ? buildEngineerCountGuidance(executionPlan)
-        : "The manager determines how many engineers to spawn based on task complexity.";
-      prompt += `
+      if (autoEngineers) {
+        prompt += `
 ### Engineers
-${engineerGuidance} For each engineer, spawn with subagent_type: sprint-engineer, named sprint-engineer-1, sprint-engineer-2, etc.
+${buildEngineerCountGuidance(executionPlan!)} For each engineer, spawn with subagent_type: sprint-engineer, named sprint-engineer-1, sprint-engineer-2, etc.
 Engineer prompt template:
 """
 ${engPrompt("sprint-engineer-N")}
 """`;
-    } else {
-      for (const { name, role } of agentNames) {
-        const isEngineer = role === "engineer" || role === "sprint-engineer";
-        const agentType = isEngineer ? "sprint-engineer" : `sprint-${role.replace(/^sprint-/, "")}`;
-        const agentPrompt = isEngineer
-          ? engPrompt(name)
-          : customRolePrompt(role, name, teamName, projectRoot, engLearnings);
-        prompt += `
+      } else {
+        for (const { name, role } of agentNames) {
+          const isEngineer = role === "engineer" || role === "sprint-engineer";
+          const agentType = isEngineer ? "sprint-engineer" : `sprint-${role.replace(/^sprint-/, "")}`;
+          const agentPrompt = isEngineer
+            ? engPrompt(name)
+            : customRolePrompt(role, name, teamName, projectRoot, engLearnings);
+          prompt += `
 ### ${name} (subagent_type: ${agentType})
 Prompt:
 """
 ${agentPrompt}
 """
 `;
+        }
       }
-    }
 
-    if (cycles > 1) {
-      prompt += `
+      if (cycles > 1) {
+        prompt += `
 
 ## Sprint Cycles (${cycles} total)
 After each cycle, the manager sends "CYCLE_COMPLETE: cycle N" to the PM. The PM then analyzes results, creates new tasks for the next cycle, and sends a new "ROADMAP_READY". Run exactly ${cycles} cycles.`;
+      }
     }
   } else {
+    const needsSizing = autoEngineers && !executionPlan;
+    const spawnStep = needsSizing ? 3 : 2;
+    const monitorStep = needsSizing ? 4 : 3;
+
     prompt += `
 This is MANUAL mode. Follow these steps IN ORDER. You have access to TaskCreate after calling TeamCreate.
 
 ## Step 1: Create ALL tasks yourself
 After TeamCreate, call TaskCreate once per task. Parse the roadmap below and create one task for each item. You MUST do this yourself — do NOT spawn any agent to create tasks for you.
+`;
 
-## Step 2: Spawn ONLY these agents
+    if (needsSizing) {
+      prompt += `
+## Step 2: Determine team size
+${planApiGuidance(port)}
+`;
+    }
+
+    prompt += `
+## Step ${spawnStep}: Spawn ONLY these agents
 After ALL tasks exist, spawn ONLY the agents listed below. No other agents.
 
 ### sprint-manager (subagent_type: sprint-manager, name: sprint-manager)
@@ -376,8 +451,8 @@ ${mgrPromptManual}
 `;
     if (autoEngineers) {
       const engineerGuidance = executionPlan
-        ? buildEngineerCountGuidance(executionPlan)
-        : "The manager determines how many engineers to spawn.";
+        ? buildEngineerCountGuidance(executionPlan!)
+        : `Spawn N engineers (N = recommendedEngineers from Step 2).`;
       prompt += `
 ### Engineers
 ${engineerGuidance} Name them sprint-engineer-1, sprint-engineer-2, etc. subagent_type: sprint-engineer.
@@ -404,7 +479,7 @@ ${agentPrompt}
 
     prompt += `
 
-## Step 3: Monitor
+## Step ${monitorStep}: Monitor
 After spawning all agents, wait for the manager to send "SPRINT_COMPLETE". Then you are done.
 
 ## Roadmap

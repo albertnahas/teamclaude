@@ -109,7 +109,8 @@ export type WsEvent =
   | { type: "token_budget_approaching"; usage: SprintState["tokenUsage"] }
   | { type: "token_budget_exceeded"; usage: SprintState["tokenUsage"] }
   | { type: "replay_complete" }
-  | { type: "replay_start"; totalEvents: number };
+  | { type: "replay_start"; totalEvents: number }
+  | { type: "plan_approved" };
 
 // --- State ---
 

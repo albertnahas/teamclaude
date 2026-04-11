@@ -9,6 +9,7 @@ import { join, resolve, dirname as pathDirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { loadRecording, startReplay } from "./replay.js";
+import { CORS } from "./http-utils.js";
 
 const args = process.argv.slice(2);
 const fileArg = args.find((a) => !a.startsWith("--")) ?? "";
@@ -38,14 +39,9 @@ let currentSpeed = speed;
 
 const server = createServer((req, res) => {
   const url = req.url ?? "/";
-  const cors: Record<string, string> = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-  };
 
   if (req.method === "OPTIONS") {
-    res.writeHead(204, cors);
+    res.writeHead(204, CORS);
     res.end();
     return;
   }
@@ -57,14 +53,14 @@ const server = createServer((req, res) => {
         res.end("Failed to load UI");
         return;
       }
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", ...cors });
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", ...CORS });
       res.end(html);
     });
     return;
   }
 
   if (url === "/api/state") {
-    res.writeHead(200, { "Content-Type": "application/json", ...cors });
+    res.writeHead(200, { "Content-Type": "application/json", ...CORS });
     res.end(JSON.stringify({ teamName: null, projectName: "replay", agents: [], tasks: [], messages: [], paused: false, escalation: null, mergeConflict: null, mode: "manual", cycle: 0, phase: "idle", reviewTaskIds: [], preValidatingTaskIds: [], tokenUsage: { total: 0, byAgent: {}, estimatedCostUsd: 0 }, checkpoints: [], pendingCheckpoint: null, tmuxAvailable: false, tmuxSessionName: null }));
     return;
   }
@@ -83,10 +79,10 @@ const server = createServer((req, res) => {
             clientCancels.set(ws, startReplay(recording, ws, currentSpeed));
           }
         }
-        res.writeHead(200, { "Content-Type": "application/json", ...cors });
+        res.writeHead(200, { "Content-Type": "application/json", ...CORS });
         res.end(JSON.stringify({ speed: currentSpeed }));
       } catch {
-        res.writeHead(400, { "Content-Type": "application/json", ...cors });
+        res.writeHead(400, { "Content-Type": "application/json", ...CORS });
         res.end(JSON.stringify({ error: "Invalid body" }));
       }
     });

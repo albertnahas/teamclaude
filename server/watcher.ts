@@ -22,6 +22,9 @@ import { saveMemory } from "./memory.js";
 export { isSprintTeam, setTeamDiscoveredHook, handleTeamConfig } from "./team-config.js";
 export { handleTaskFile } from "./task-state.js";
 
+import { isSprintComplete, setSprintComplete, resetSprintCompleteFlag } from "./sprint-guard.js";
+export { isSprintComplete, resetSprintCompleteFlag } from "./sprint-guard.js";
+
 export function handleInboxMessage(filePath: string) {
   if (!state.teamName || !filePath.includes(state.teamName)) return;
 
@@ -191,17 +194,23 @@ export function handleInboxMessage(filePath: string) {
         const m = content.match(/NEXT_CYCLE:\s*(\d+)/);
         state.cycle = m ? parseInt(m[1], 10) : state.cycle + 1;
         state.phase = "analyzing";
+        resetSprintCompleteFlag();
         phaseChanged = true;
       } else if (message.protocol === "ROADMAP_READY") {
-        const m = content.match(/cycle\s+(\d+)/);
-        if (m) state.cycle = parseInt(m[1], 10);
-        state.phase = "sprinting";
-        phaseChanged = true;
+        // Ignore ROADMAP_READY after SPRINT_COMPLETE — prevents PM race condition
+        // where PM starts a new cycle before shutdown is processed.
+        if (!isSprintComplete()) {
+          const m = content.match(/cycle\s+(\d+)/);
+          if (m) state.cycle = parseInt(m[1], 10);
+          state.phase = "sprinting";
+          phaseChanged = true;
+        }
       } else if (message.protocol === "CYCLE_COMPLETE") {
         state.phase = "validating";
         phaseChanged = true;
         triggerValidation();
       } else if (message.protocol === "SPRINT_COMPLETE") {
+        setSprintComplete();
         state.phase = "validating";
         phaseChanged = true;
         triggerValidation();

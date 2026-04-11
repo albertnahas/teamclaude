@@ -23,12 +23,13 @@ import { fireOnSprintStart, fireOnSprintStop } from "./plugin-loader.js";
 import { loadGitHubConfig, postRetroToPR, postSprintStatusToPR } from "./github.js";
 import { loadMemories, saveMemory, deleteMemory, searchMemories } from "./memory.js";
 import { sprintCtx, launchViaTmux, launchViaSpawn, stopPanePolling, reconnectTmuxSession } from "./sprint-lifecycle.js";
+import { setBudgetConfigCache } from "./token-tracker.js";
+import { loadBudgetConfig } from "./budget.js";
+import { CORS } from "./http-utils.js";
+import { resetSprintCompleteFlag } from "./sprint-guard.js";
 
-const CORS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-};
+let _serverPort = 3456;
+export function setServerPort(p: number) { _serverPort = p; }
 
 function serveUI(_req: IncomingMessage, res: ServerResponse) {
   const uiDir = import.meta.dirname ?? pathDirname(fileURLToPath(import.meta.url));
@@ -62,6 +63,14 @@ function handleLaunch(req: IncomingMessage, res: ServerResponse) {
         return;
       }
 
+      // Reset stale state from previous sprint before launching
+      const tmuxWasAvailable = state.tmuxAvailable;
+      resetState();
+      state.tmuxAvailable = tmuxWasAvailable;
+      state.projectName = detectProjectName();
+      state.phase = "analyzing";
+      broadcast({ type: "init", state });
+
       const roleLearnings = getRoleLearnings(5);
       const customRoles = loadCustomRoles(process.cwd()) ?? undefined;
       const autoEngineers = engineers === 0 && !customRoles?.length;
@@ -71,8 +80,12 @@ function handleLaunch(req: IncomingMessage, res: ServerResponse) {
         const tasksWithDeps = applyInferredDependencies(state.tasks, inferred);
         executionPlan = buildExecutionPlan(tasksWithDeps);
       }
-      const prompt = compileSprintPrompt(roadmap || "", engineers, includePM, cycles, roleLearnings, customRoles, process.cwd(), executionPlan);
+      const prompt = compileSprintPrompt(roadmap || "", engineers, includePM, cycles, roleLearnings, customRoles, process.cwd(), executionPlan, _serverPort);
       const startedAt = Date.now();
+
+      // Prime budget config cache once at sprint start to avoid per-event disk reads
+      setBudgetConfigCache(loadBudgetConfig(process.cwd()));
+      resetSprintCompleteFlag();
 
       // Generate sprint ID once on launch so recording and history use the same ID
       sprintCtx.currentSprintId = generateSprintId();
@@ -159,6 +172,8 @@ function handleStop(res: ServerResponse) {
   const branchAtStop = sprintCtx.sprintBranch;
   sprintCtx.sprintBranch = null;
   const tmuxWasAvailable = state.tmuxAvailable;
+  setBudgetConfigCache(undefined);
+  resetSprintCompleteFlag();
   resetState();
   state.projectName = detectProjectName();
   state.tmuxAvailable = tmuxWasAvailable;
@@ -283,8 +298,9 @@ export function handleRequest(req: IncomingMessage, res: ServerResponse) {
       recommendedEngineers: recommendEngineers(executionPlan),
     }));
   } else if (url === "/api/plan/approve" && req.method === "POST") {
-    res.writeHead(501, { "Content-Type": "application/json", ...CORS });
-    res.end(JSON.stringify({ error: "Not implemented" }));
+    broadcast({ type: "plan_approved" });
+    res.writeHead(200, { "Content-Type": "application/json", ...CORS });
+    res.end(JSON.stringify({ ok: true }));
   } else if (url === "/api/task-models" && req.method === "GET") {
     const overrides = loadModelOverrides(join(process.cwd(), ".sprint.yml"));
     res.writeHead(200, { "Content-Type": "application/json", ...CORS });

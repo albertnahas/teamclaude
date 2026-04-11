@@ -25,7 +25,7 @@ vi.mock("./budget.js", () => ({
   checkBudget: vi.fn(() => "ok"),
 }));
 
-import { accumulateTokenUsage, resolveModelPricing, PRICING_TABLE } from "./token-tracker.js";
+import { accumulateTokenUsage, resolveModelPricing, PRICING_TABLE, setBudgetConfigCache } from "./token-tracker.js";
 import { state, broadcast } from "./state.js";
 import { notifyWebhook } from "./notifications.js";
 import { loadBudgetConfig, checkBudget } from "./budget.js";
@@ -41,6 +41,8 @@ function resetState() {
 describe("accumulateTokenUsage", () => {
   beforeEach(() => {
     resetState();
+    // Reset cache to undefined so the fallback path (loadBudgetConfig) is used by default
+    setBudgetConfigCache(undefined);
     vi.clearAllMocks();
     vi.mocked(loadBudgetConfig).mockReturnValue(null);
     vi.mocked(checkBudget).mockReturnValue("ok");
@@ -182,6 +184,36 @@ describe("accumulateTokenUsage", () => {
     vi.mocked(loadBudgetConfig).mockReturnValue(config2);
     accumulateTokenUsage("agent-1", 100, 50);
     expect(state.tokenBudgetConfig).toEqual(config1); // unchanged
+  });
+
+  it("uses setBudgetConfigCache value instead of calling loadBudgetConfig", () => {
+    const cached = { tokens: 5000 };
+    setBudgetConfigCache(cached);
+    vi.mocked(checkBudget).mockReturnValue("ok");
+
+    accumulateTokenUsage("agent-1", 100, 50);
+
+    expect(loadBudgetConfig).not.toHaveBeenCalled();
+    expect(checkBudget).toHaveBeenCalledWith(state.tokenUsage, cached);
+  });
+
+  it("falls back to loadBudgetConfig when cache is cleared (undefined)", () => {
+    // cache is undefined by default in beforeEach
+    vi.mocked(loadBudgetConfig).mockReturnValue({ tokens: 1000 });
+    vi.mocked(checkBudget).mockReturnValue("ok");
+
+    accumulateTokenUsage("agent-1", 100, 50);
+
+    expect(loadBudgetConfig).toHaveBeenCalled();
+  });
+
+  it("skips loadBudgetConfig when cache is null (no budget configured)", () => {
+    setBudgetConfigCache(null);
+
+    accumulateTokenUsage("agent-1", 100, 50);
+
+    expect(loadBudgetConfig).not.toHaveBeenCalled();
+    expect(checkBudget).not.toHaveBeenCalled();
   });
 });
 

@@ -591,6 +591,15 @@ describe("POST /api/checkpoint/release", () => {
   });
 });
 
+describe("POST /api/plan/approve", () => {
+  it("returns 200 with ok: true and broadcasts plan_approved", async () => {
+    const r = await json("POST", "/api/plan/approve");
+    expect(r.status).toBe(200);
+    expect(r.json).toMatchObject({ ok: true });
+    expect(broadcast).toHaveBeenCalledWith({ type: "plan_approved" });
+  });
+});
+
 describe("POST /api/resume", () => {
   it("returns resumed: false when no persisted state", async () => {
     vi.mocked(loadPersistedState).mockReturnValueOnce(null);

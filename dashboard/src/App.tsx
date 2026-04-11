@@ -233,6 +233,8 @@ function sprintReducer(state: SprintState, event: WsEvent): SprintState {
       return { ...state, tokenBudgetApproaching: true, tokenUsage: event.usage };
     case "token_budget_exceeded":
       return { ...state, tokenBudgetApproaching: true, tokenBudgetExceeded: true, paused: true, tokenUsage: event.usage };
+    case "plan_approved":
+      return { ...state, phase: "sprinting" };
     case "pre_validation":
       return { ...state, preValidatingTaskIds: state.preValidatingTaskIds.filter((id) => id !== event.taskId) };
     case "task_validation":
@@ -300,13 +302,13 @@ export default function App() {
     if (event.type === "replay_start") {
       replayTotalEvents.current = event.totalEvents;
       replayEventCount.current = 0;
+      setAppPhase("replay");
       return;
     }
     dispatch(event);
     replayEventCount.current += 1;
     if (event.type === "init") {
-      if (event.state.teamName) setAppPhase("replay");
-      else if (event.state.phase !== "idle") setAppPhase("sprint");
+      if (event.state.phase !== "idle") setAppPhase((prev) => prev === "replay" ? "replay" : "sprint");
       // Reset budget warning when state is re-initialized
       if (!event.state.tokenBudgetApproaching && !event.state.tokenBudgetExceeded) setBudgetWarningDismissed(false);
     }
@@ -434,6 +436,11 @@ export default function App() {
     window.location.reload();
   };
 
+  const isLaunching = appPhase === "sprint"
+    && sprintState.agents.length === 0
+    && sprintState.tasks.length === 0
+    && sprintState.messages.length === 0;
+
   return (
     <div id="sprint-phase">
       {appPhase === "replay" && (
@@ -475,9 +482,19 @@ export default function App() {
         onShowMemory={() => setShowMemory(true)}
       />
 
-      <div className="container" style={{ "--sidebar-w": `${sidebarWidth}px`, "--msg-h": `${msgHeight}px` } as React.CSSProperties}>
+      {isLaunching ? (
+        <div className="launching-overlay">
+          <svg className="launching-spinner" viewBox="0 0 50 50">
+            <circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" strokeWidth="3" strokeDasharray="90 150" strokeLinecap="round" />
+          </svg>
+          <div className="launching-text">Initializing sprint...</div>
+          <div className="launching-hint">Waiting for agents to come online</div>
+        </div>
+      ) : null}
+
+      <div className="container" style={{ "--sidebar-w": `${sidebarWidth}px`, "--msg-h": `${msgHeight}px`, visibility: isLaunching ? "hidden" : "visible" } as React.CSSProperties}>
         <div className="panel agents-panel" style={{ overflow: "hidden" }}>
-          {openTerminalAgent && sprintState.tmuxSessionName ? (
+          {openTerminalAgent && (sprintState.tmuxSessionName || terminalState.panes.length > 0) ? (
             <TerminalView
               agentName={openTerminalAgent}
               lines={terminalState.lines}

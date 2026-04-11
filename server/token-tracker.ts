@@ -2,7 +2,20 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { state, broadcast } from "./state.js";
 import { notifyWebhook } from "./notifications.js";
-import { loadBudgetConfig, checkBudget } from "./budget.js";
+import { loadBudgetConfig, checkBudget, type BudgetConfig } from "./budget.js";
+
+// Cached budget config — set once at sprint start, cleared on reset
+let budgetConfigCache: BudgetConfig | null | undefined = undefined;
+
+/**
+ * Set the budget config cache.
+ * - Pass a `BudgetConfig` at sprint start to prime it.
+ * - Pass `null` to mark "no budget configured" (avoids disk re-reads).
+ * - Pass `undefined` to clear the cache so the next call falls back to disk.
+ */
+export function setBudgetConfigCache(config: BudgetConfig | null | undefined): void {
+  budgetConfigCache = config;
+}
 
 // --- Pricing table ---
 // Prices in USD per million tokens (MTok).
@@ -49,7 +62,9 @@ export function accumulateTokenUsage(
 
   // Check token budget — approaching (80%) and exceeded (100%) each fire once per sprint
   if (!state.tokenBudgetExceeded) {
-    const budgetConfig = loadBudgetConfig(process.cwd());
+    // Use cached config if available; fall back to disk read if cache was never primed
+    const budgetConfig =
+      budgetConfigCache !== undefined ? budgetConfigCache : loadBudgetConfig(process.cwd());
     if (budgetConfig) {
       // Cache budget config in state so frontend can display it
       if (!state.tokenBudgetConfig) state.tokenBudgetConfig = budgetConfig;

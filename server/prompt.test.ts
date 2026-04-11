@@ -158,9 +158,11 @@ describe("compileSprintPrompt", () => {
   });
 
   describe("autonomous mode — autoEngineers (engineers=0)", () => {
-    it("tells manager to determine engineer count, not hardcoded names", () => {
+    it("uses phased approach with plan API when no executionPlan", () => {
       const prompt = compileSprintPrompt("Analyze and build", 0, true, 1);
-      expect(prompt).toContain("manager determines");
+      expect(prompt).toContain("Determine Team Size");
+      expect(prompt).toContain("/api/plan");
+      expect(prompt).toContain("recommendedEngineers");
       expect(prompt).toContain("sprint-engineer-N");
       expect(prompt).not.toContain('"sprint-engineer-1"');
     });
@@ -179,10 +181,28 @@ describe("compileSprintPrompt", () => {
       expect(prompt).not.toContain("Spawn 1 engineers");
     });
 
-    it("falls back to generic guidance when no executionPlan provided", () => {
+    it("uses phased approach with plan API query when no executionPlan", () => {
       const prompt = compileSprintPrompt("Analyze and build", 0, true, 1);
-      expect(prompt).toContain("manager determines how many engineers to spawn based on task complexity");
+      expect(prompt).toContain("Phase 1: Task Planning");
+      expect(prompt).toContain("Phase 2: Determine Team Size");
+      expect(prompt).toContain("curl -s http://localhost:3456/api/plan");
       expect(prompt).not.toContain("tasks can run in parallel");
+    });
+
+    it("manual mode uses plan API query when autoEngineers and no executionPlan", () => {
+      const prompt = compileSprintPrompt("Build it", 0, false, 1);
+      expect(prompt).toContain("Step 2: Determine team size");
+      expect(prompt).toContain("/api/plan");
+      expect(prompt).toContain("Step 3: Spawn");
+      expect(prompt).toContain("Step 4: Monitor");
+    });
+
+    it("manual mode skips sizing step when executionPlan is provided", () => {
+      const plan = { batches: [["1", "2"], ["3"]], criticalPath: ["1", "3"], timeline: "" };
+      const prompt = compileSprintPrompt("Build it", 0, false, 1, undefined, undefined, process.cwd(), plan);
+      expect(prompt).not.toContain("Determine team size");
+      expect(prompt).toContain("Step 2: Spawn");
+      expect(prompt).toContain("Step 3: Monitor");
     });
   });
 

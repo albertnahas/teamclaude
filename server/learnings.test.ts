@@ -413,7 +413,7 @@ describe("getRoleLearnings", () => {
     expect(lines).toHaveLength(3);
   });
 
-  it("orchestrator gets only frequency >= 2 items", () => {
+  it("orchestrator gets only frequency >= 2 cross-role items", () => {
     mkdirSync(join(tmpProjectRoot, ".teamclaude"), { recursive: true });
     const store = {
       version: 1,
@@ -427,6 +427,34 @@ describe("getRoleLearnings", () => {
     const result = getRoleLearnings();
     expect(result.orchestrator).toContain("High freq");
     expect(result.orchestrator).not.toContain("Low freq");
+  });
+
+  it("orchestrator includes orchestrator-role learnings regardless of frequency", () => {
+    mkdirSync(join(tmpProjectRoot, ".teamclaude"), { recursive: true });
+    const store = {
+      version: 1,
+      learnings: [
+        { id: "a", signal: "A", source: "agent", role: "orchestrator", action: "Orchestrator specific", frequency: 1, firstSeen: "", lastSeen: "", sprintIds: [] },
+        { id: "b", signal: "B", source: "signal", role: "pm", action: "High freq pm", frequency: 3, firstSeen: "", lastSeen: "", sprintIds: [] },
+      ],
+    };
+    writeFileSync(processLearningsFile, JSON.stringify(store), "utf-8");
+
+    const result = getRoleLearnings();
+    expect(result.orchestrator).toContain("Orchestrator specific");
+    expect(result.orchestrator).toContain("High freq pm");
+  });
+});
+
+describe("parseAgentLearnings — orchestrator role", () => {
+  it("parses orchestrator role from PROCESS_LEARNING messages", () => {
+    const messages = [
+      { id: "1", timestamp: 1, from: "mgr", to: "lead", content: "PROCESS_LEARNING: orchestrator — Coordinate cross-agent dependencies earlier", protocol: "PROCESS_LEARNING" },
+    ] as SprintState["messages"];
+    const result = parseAgentLearnings(messages);
+    expect(result).toEqual([
+      { role: "orchestrator", action: "Coordinate cross-agent dependencies earlier" },
+    ]);
   });
 });
 

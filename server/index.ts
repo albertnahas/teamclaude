@@ -12,7 +12,7 @@ import { migrateGlobalAnalytics } from "./analytics.js";
 import * as tmux from "./tmux.js";
 import { initNotifications } from "./notifications.js";
 import { loadPlugins } from "./plugin-loader.js";
-import { handleRequest } from "./http-handlers.js";
+import { handleRequest, setServerPort } from "./http-handlers.js";
 import { sprintCtx, stopPanePolling, discoverAndPollPanes, reconnectTmuxSession } from "./sprint-lifecycle.js";
 import { Recorder } from "./replay.js";
 
@@ -62,6 +62,7 @@ const TASKS_DIR = join(CLAUDE_DIR, "tasks");
 // --- Recording setup ---
 
 const { port, recordingEnabled } = parseArgs();
+setServerPort(port);
 const recorder = new Recorder();
 
 if (recordingEnabled) {

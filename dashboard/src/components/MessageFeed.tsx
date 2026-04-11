@@ -43,12 +43,17 @@ function extractProtocolTag(content: string): string | null {
   return null;
 }
 
+function isPreValidationFailure(message: Message): boolean {
+  return message.from === "system" && message.content.startsWith("Pre-review verification output");
+}
+
 function MessageRow({ message }: { message: Message }) {
   const tag = extractProtocolTag(message.content);
   const tagStyle = tag ? PROTOCOL_COLORS[tag] : null;
+  const prevalFail = isPreValidationFailure(message);
 
   return (
-    <div className="message-row">
+    <div className="message-row" style={prevalFail ? { borderLeft: "3px solid #f87171", paddingLeft: 8 } : undefined}>
       <div className="message-meta">
         <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 600, color: senderColor(message.from) }}>
           {message.from}

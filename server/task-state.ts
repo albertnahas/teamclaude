@@ -1,6 +1,7 @@
 import { basename } from "node:path";
 import { state, taskProtocolOverrides, safeReadJSON, broadcast } from "./state.js";
 import type { TaskInfo } from "./state.js";
+import { isSprintComplete } from "./sprint-guard.js";
 
 export function handleTaskFile(filePath: string) {
   if (!state.teamName || !filePath.includes(state.teamName)) return;
@@ -48,6 +49,9 @@ export function handleTaskFile(filePath: string) {
     if (existing >= 0) {
       state.tasks[existing] = task;
     } else {
+      // Block new task ingestion after SPRINT_COMPLETE to prevent
+      // PM race condition creating next-cycle tasks before shutdown.
+      if (isSprintComplete()) continue;
       state.tasks.push(task);
     }
 

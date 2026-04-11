@@ -5,7 +5,7 @@ import type { SprintRecord } from "./analytics.js";
 
 // --- Types ---
 
-export type LearningRole = "pm" | "manager" | "engineer";
+export type LearningRole = "pm" | "manager" | "engineer" | "orchestrator";
 export type LearningSource = "signal" | "agent";
 
 export interface ProcessLearning {
@@ -201,12 +201,12 @@ export function parseAgentLearnings(
   messages: SprintState["messages"]
 ): { role: LearningRole; action: string }[] {
   const results: { role: LearningRole; action: string }[] = [];
-  const validRoles = new Set<string>(["pm", "manager", "engineer"]);
+  const validRoles = new Set<string>(["pm", "manager", "engineer", "orchestrator"]);
 
   for (const msg of messages) {
     if (msg.protocol !== "PROCESS_LEARNING") continue;
     const match = msg.content.match(
-      /^PROCESS_LEARNING:\s*(pm|manager|engineer)\s*[—–-]\s*(.+)/i
+      /^PROCESS_LEARNING:\s*(pm|manager|engineer|orchestrator)\s*[—–-]\s*(.+)/i
     );
     if (!match) continue;
     const role = match[1].toLowerCase() as LearningRole;
@@ -271,11 +271,13 @@ export function getRoleLearnings(maxPerRole: number = 5): RoleLearnings {
   const byRole = (role: LearningRole) =>
     formatLearnings(sorted.filter((l) => l.role === role).slice(0, maxPerRole));
 
-  // Orchestrator gets high-frequency cross-role items
-  const crossRole = sorted.filter((l) => l.frequency >= 2).slice(0, maxPerRole);
+  // Orchestrator gets its own role learnings plus high-frequency cross-role items, deduped
+  const orchestratorOwn = sorted.filter((l) => l.role === "orchestrator");
+  const crossRole = sorted.filter((l) => l.frequency >= 2 && l.role !== "orchestrator");
+  const orchestratorItems = [...orchestratorOwn, ...crossRole].slice(0, maxPerRole);
 
   return {
-    orchestrator: formatLearnings(crossRole),
+    orchestrator: formatLearnings(orchestratorItems),
     pm: byRole("pm"),
     manager: byRole("manager"),
     engineer: byRole("engineer"),
